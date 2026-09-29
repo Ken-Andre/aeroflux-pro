@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>AeroFlux Pro — Simulateur & Dashboard</title>
+<link rel="stylesheet" href="style.css" />
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="hud"></canvas>
+<div id="letterbox"><i></i><i></i></div>
+<div id="flash"></div>
+
+<!-- Barre supérieure -->
+<header id="top" class="glass">
+  <div class="brand"><svg viewBox="0 0 24 24" width="22"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg><div><b>AEROFLUX PRO</b><small id="netState">● Solo local</small></div></div>
+  <nav class="seg" id="viewTabs"><button data-v="fly" class="on">🎮 Grand écran</button><button data-v="dash">📊 Dashboard</button></nav>
+  <div class="seg"><button id="btnMusic">🎵 <span id="trackName">Skyline Synth</span></button><button id="btnNextTrack" title="Piste suivante (N)">⏭</button><input id="vol" type="range" min="0" max="1" step="0.01" value="0.55" /></div>
+  <nav class="seg" id="todTabs"><button data-t="day" class="on">Jour</button><button data-t="sunset">Sunset</button><button data-t="night">Nuit</button></nav>
+  <nav class="seg" id="qTabs"><button data-q="perf">Perf</button><button data-q="high" class="on">Haute</button><button data-q="ultra">Ultra</button></nav>
+  <div class="seg"><button id="btnCam" title="C">🎥 <span id="camName">Poursuite</span></button><button id="btnCine" title="Mode cinéma 21:9">21:9</button><button id="btnFs" title="Plein écran">⛶</button><button id="btnWidgets" title="H">▦ Widgets</button></div>
+</header>
+
+<!-- HUD glass -->
+<div id="hudCards">
+  <div class="glass card mini" id="cardSys">
+    <div class="row"><span class="led" id="ledGear"></span>TRAIN <b id="txtGear">SORTI</b></div>
+    <div class="row"><span class="led" id="ledFlaps"></span>VOLETS <b id="txtFlaps">0°</b></div>
+    <div class="row"><span class="led" id="ledBrake"></span>FREINS <b id="txtBrake">OFF</b></div>
+    <div class="thr"><div id="thrBar"></div></div><div class="row sm">POUSSÉE <b id="txtThr">0%</b></div>
+  </div>
+</div>
+<canvas id="minimap" width="220" height="220"></canvas>
+<div id="toast"></div>
+<div id="phase" class="glass pill">AU SOL · PARKING</div>
+<div id="help" class="glass">
+  <b>Commandes</b> ↑/↓ ou Z/S tangage · ←/→ ou Q/D roulis · A/E lacet · Maj/Ctrl ou R/F poussée · G train · V volets · B freins · C caméra · H widgets · T chat · P pause · N musique · Clic-glisser : orbite caméra
+  <button onclick="this.parentNode.remove()">OK</button>
+</div>
+
+<!-- Widgets flottants (liquid glass) -->
+<aside id="widgets" class="glass hidden">
+  <div class="wh"><b>TÉLÉMÉTRIE LIVE</b><span id="wScore">Score 0</span></div>
+  <div class="kgrid">
+    <div class="kpi"><label>VITESSE IAS</label><div><b id="kSpd" class="c1">0</b> kt</div><canvas class="spark" id="sSpd"></canvas></div>
+    <div class="kpi"><label>ALTITUDE</label><div><b id="kAlt" class="c2">0</b> ft</div><canvas class="spark" id="sAlt"></canvas></div>
+    <div class="kpi"><label>VARIOMÈTRE</label><div><b id="kVs" class="c3">0</b> ft/min</div><canvas class="spark" id="sVs"></canvas></div>
+    <div class="kpi"><label>CHARGE G</label><div><b id="kG" class="c4">1.00</b> G</div><canvas class="spark" id="sG"></canvas></div>
+  </div>
+  <label class="sub">APPROCHE PISTE 36 — ILS</label>
+  <canvas id="ils" height="90"></canvas>
+  <div id="atc">ATC : Bienvenue, autorisé au décollage piste 36.</div>
+</aside>
+
+<!-- Dashboard Power BI -->
+<section id="dash" class="hidden">
+  <div class="dhead"><div><h1>Flight Operations Analytics</h1><p>Rapport en temps réel · <span id="dNow"></span></p></div>
+    <div class="slicers"><span>Filtre appareil :</span><button data-f="all" class="on">Tous</button><button data-f="jet">Vortex X1</button><button data-f="cargo">Atlas C-9</button><button data-f="prop">Sparrow 172</button></div></div>
+  <div class="dgrid">
+    <div class="glass tile kp"><label>Vols archivés</label><b id="dK1">0</b><em id="dK1s"></em></div>
+    <div class="glass tile kp"><label>Atterrissages réussis</label><b id="dK2">0</b><em id="dK2s"></em></div>
+    <div class="glass tile kp"><label>Taux de réussite</label><b id="dK3">0%</b><em id="dK3s"></em></div>
+    <div class="glass tile kp"><label>Heures de vol</label><b id="dK4">0</b><em id="dK4s"></em></div>
+    <div class="glass tile kp"><label>Score moyen</label><b id="dK5">0</b><em id="dK5s"></em></div>
+    <div class="glass tile w8 h2"><label>Profil du vol en cours — Altitude (ft) & Vitesse (kt)</label><canvas id="cLine"></canvas></div>
+    <div class="glass tile w4 h2"><label>Trajectoire (vue satellite)</label><canvas id="cTrack"></canvas></div>
+    <div class="glass tile w3 h2"><label>Charge G instantanée</label><canvas id="cGauge"></canvas></div>
+    <div class="glass tile w3 h2"><label>Temps par phase de vol</label><canvas id="cDonut"></canvas></div>
+    <div class="glass tile w6 h2"><label>Scores des 12 derniers vols</label><canvas id="cBars"></canvas></div>
+    <div class="glass tile w6 h2"><label>Taux de chute au toucher (ft/min) — qualité d'atterrissage</label><canvas id="cScatter"></canvas></div>
+    <div class="glass tile w6 h2 tbl"><label>Journal des vols</label><div id="dTable"></div></div>
+  </div>
+</section>
+
+<!-- Écran de départ -->
+<section id="start">
+  <div class="glass panel">
+    <h1>AeroFlux <span>Pro</span></h1>
+    <p>Simulateur de vol 3D · Dashboard analytique · Multijoueur LAN</p>
+    <label>Indicatif</label><input id="pName" value="ALPHA-1" maxlength="12" />
+    <label>Appareil</label>
+    <div class="planes" id="planePick">
+      <button data-p="jet" class="on"><b>Vortex X1</b><small>Chasseur bimoteur · rapide · agile</small></button>
+      <button data-p="cargo"><b>Atlas C-9</b><small>Long-courrier 4 réacteurs · stable</small></button>
+      <button data-p="prop"><b>Sparrow 172</b><small>Monomoteur hélice · idéal pour apprendre</small></button>
+    </div>
+    <label>Départ</label>
+    <div class="planes two" id="spawnPick">
+      <button data-s="runway" class="on"><b>Seuil piste 36</b><small>Décollage</small></button>
+      <button data-s="approach"><b>Finale 5 km</b><small>Entraînement atterrissage</small></button>
+    </div>
+    <label>Mode</label>
+    <div class="planes two" id="modePick">
+      <button data-m="solo" class="on"><b>Solo</b><small>Hors-ligne</small></button>
+      <button data-m="lan"><b>Multijoueur LAN</b><small>Même serveur, même réseau</small></button>
+    </div>
+    <button id="go" class="cta">DÉCOLLER ✈</button>
+    <small id="loadInfo"></small>
+  </div>
+</section>
+<input id="chatIn" class="glass hidden" placeholder="Message aux autres pilotes… (Entrée)" maxlength="120" />
+<div id="chatLog"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
