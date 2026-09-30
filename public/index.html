@@ -19,6 +19,7 @@
 <header id="top" class="glass">
   <div class="brand"><svg viewBox="0 0 24 24" width="22"><path fill="currentColor" d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg><div><b>AEROFLUX PRO</b><small id="netState">● Solo local</small></div></div>
   <nav class="seg" id="viewTabs"><button data-v="fly" class="on">🎮 Grand écran</button><button data-v="dash">📊 Dashboard</button></nav>
+  <div class="seg"><button id="btnGarage">🛠 Garage</button><button id="btnMissions">🎯 Missions</button><button id="btnCareer">🏅 Carrière</button></div>
   <div class="seg"><button id="btnMusic">🎵 <span id="trackName">Skyline Synth</span></button><button id="btnNextTrack" title="Piste suivante (N)">⏭</button><input id="vol" type="range" min="0" max="1" step="0.01" value="0.55" /></div>
   <nav class="seg" id="todTabs"><button data-t="day" class="on">Jour</button><button data-t="sunset">Sunset</button><button data-t="night">Nuit</button></nav>
   <nav class="seg" id="qTabs"><button data-q="perf">Perf</button><button data-q="high" class="on">Haute</button><button data-q="ultra">Ultra</button></nav>
@@ -37,6 +38,22 @@
 <canvas id="minimap" width="220" height="220"></canvas>
 <div id="toast"></div>
 <div id="phase" class="glass pill">AU SOL · PARKING</div>
+<div id="xpBar" class="glass"><span class="lvl" id="xpLvl">1</span><div><small id="xpRank">Élève pilote</small><i><em id="xpFill"></em></i></div><b id="xpTxt">0 / 300 XP</b></div>
+<div id="xpPops"></div><div id="achvStack"></div>
+<div id="missionCard" class="glass hidden"></div>
+<section id="missionsModal" class="modal hidden"><div class="glass panel wide"><div class="mhd"><h2>🎯 Missions</h2><button class="x" data-close>✕</button></div><div id="missionList" class="mgrid"></div></div></section>
+<section id="careerModal" class="modal hidden"><div class="glass panel wide"><div class="mhd"><h2>🏅 Carrière</h2><button class="x" data-close>✕</button></div><div id="careerBody"></div></div></section>
+<section id="garage" class="hidden">
+  <div class="gtop glass"><b>🛠 HANGAR</b><div class="seg" id="gPlanes"></div><span id="gMesh"></span><button id="gClose" class="x">✕</button></div>
+  <aside class="gleft glass"><h2 id="gName"></h2><p id="gDesc"></p><div id="gStats"></div></aside>
+  <aside class="gright glass">
+    <label>Livrées</label><div id="gLiv" class="livs"></div>
+    <label>Animations</label><div class="gtog"><button id="gGear" class="on">Train</button><button id="gFlaps">Volets</button><button id="gSurf">Gouvernes</button><button id="gEngine">Moteurs</button><button id="gRot" class="on">Rotation</button><button id="gWire">Fil de fer</button></div>
+    <label>Points de vue</label><div class="gtog" id="gSpots"><button data-s="all">Ensemble</button><button data-s="nose">Nez</button><button data-s="cockpit">Cockpit</button><button data-s="wing">Aile</button><button data-s="engines">Moteurs</button><button data-s="gear">Train</button><button data-s="tail">Empennage</button><button data-s="top">Dessus</button></div>
+    <button id="gFly" class="cta">VOLER AVEC CET APPAREIL ✈</button>
+  </aside>
+  <div class="ghint">Clic gauche : tourner · Molette : zoom · Clic droit : déplacer · ← → : changer d'appareil · Échap : fermer</div>
+</section>
 <div id="help" class="glass">
   <b>Commandes</b> <kbd>W</kbd><kbd>S</kbd> piquer / cabrer · <kbd>A</kbd><kbd>D</kbd> roulis · <kbd>Q</kbd><kbd>E</kbd> lacet · <kbd>Shift</kbd><kbd>Ctrl</kbd> poussée · <kbd>Espace</kbd> freins · <kbd>G</kbd> train · <kbd>V</kbd> volets · <kbd>C</kbd> caméra · <kbd>H</kbd> widgets · <kbd>T</kbd> chat · <kbd>P</kbd> pause · <kbd>N</kbd> musique<br>
   <b>Décoller :</b> Shift jusqu'à 100 % → à « ROTATION » maintenez <kbd>S</kbd>. · <b>Atterrir :</b> train sorti, volets, descente douce. · <kbd>L</kbd> assistance de vol · <kbd>I</kbd> inverser tangage
@@ -99,7 +116,7 @@
       <button data-m="solo" class="on"><b>Solo</b><small>Hors-ligne</small></button>
       <button data-m="lan"><b>Multijoueur LAN</b><small>Même serveur, même réseau</small></button>
     </div>
-    <button id="go" class="cta">DÉCOLLER ✈</button>
+    <div class="two-btn"><button id="goGarage" class="cta ghost">🛠 GARAGE 3D</button><button id="go" class="cta">DÉCOLLER ✈</button></div>
     <small id="loadInfo"></small>
   </div>
 </section>

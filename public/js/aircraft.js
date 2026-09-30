@@ -7,14 +7,24 @@ export const SPECS = {
   prop:  { name: 'Sparrow 172', mass: 1100,  S: 16,  thrust: 5200,  cd0: 0.03,  len: 8.3, gearH: 1.2, vr: 30,  stall: 24, color: 0xf8fafc, accent: 0xdc2626, roll: 1.6, pitch: 0.9, yaw: 0.5, cam: 16 },
 };
 
-function livery(spec, type, callsign) {
+export const LIVERIES = [
+  { id: 'default', name: 'Usine', lvl: 1 },
+  { id: 'arctic', name: 'Arctique', lvl: 2, color: 0xf4f7fb, accent: 0x1d4ed8, metal: 0.3, rough: 0.3 },
+  { id: 'racing', name: 'Racing', lvl: 3, color: 0xdc2626, accent: 0xfafafa, metal: 0.3, rough: 0.2 },
+  { id: 'stealth', name: 'Furtif', lvl: 4, color: 0x22262c, accent: 0xfbbf24, metal: 0.2, rough: 0.6 },
+  { id: 'ocean', name: 'Océan', lvl: 5, color: 0x0e7490, accent: 0xfde68a, metal: 0.4, rough: 0.25 },
+  { id: 'chrome', name: 'Chrome', lvl: 7, color: 0xd9dde3, accent: 0x111827, metal: 1.0, rough: 0.08 },
+  { id: 'gold', name: 'Or Impérial', lvl: 10, color: 0xd4a73a, accent: 0x1f2937, metal: 1.0, rough: 0.18 },
+  { id: 'neon', name: 'Néon', lvl: 12, color: 0x1e1b4b, accent: 0xf472b6, metal: 0.5, rough: 0.2, glow: true },
+];
+function livery(spec, type, callsign, custom) {
   const c = document.createElement('canvas'); c.width = 1024; c.height = 512; const g = c.getContext('2d');
   const base = '#' + new THREE.Color(spec.color).getHexString(), acc = '#' + new THREE.Color(spec.accent).getHexString();
   g.fillStyle = base; g.fillRect(0, 0, 1024, 512);
   // bruit de peinture
   for (let i = 0; i < 6000; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},0.025)`; g.fillRect(Math.random() * 1024, Math.random() * 512, 2, 2); }
   // u = tour (0..1), v = longueur (0 queue → 1 nez) ; x = u*1024, y = (1-v)*512
-  if (type === 'jet') {
+  if (type === 'jet' && !custom) {
     g.fillStyle = '#5b6570'; g.fillRect(0, 0, 1024, 512); g.globalAlpha = 0.35; // camouflage
     for (let i = 0; i < 40; i++) { g.fillStyle = i % 2 ? '#7c8793' : '#4b545e'; g.beginPath(); g.ellipse(Math.random() * 1024, Math.random() * 512, 60 + Math.random() * 90, 30 + Math.random() * 50, Math.random() * 3, 0, 7); g.fill(); }
     g.globalAlpha = 1;
@@ -49,11 +59,12 @@ function wing(span, root, tip, sweep, thick, dihedral = 0) {
 }
 function lathe(profile, seg = 48) { const pts = profile.map(([r, y]) => new THREE.Vector2(Math.max(r, 0.001), y)); const g = new THREE.LatheGeometry(pts, seg); g.rotateX(-Math.PI / 2); return g; }
 
-export function buildAircraft(type, callsign = 'ALPHA-1') {
-  const sp = SPECS[type]; const root = new THREE.Group(); const parts = { ailL: null, ailR: null, elev: null, rudder: null, gear: [], props: [], burners: [], strobes: [], flaps: [] };
-  const skin = new THREE.MeshStandardMaterial({ map: livery(sp, type, callsign), metalness: type === 'jet' ? 0.55 : 0.35, roughness: type === 'jet' ? 0.45 : 0.28 });
-  const paint = new THREE.MeshStandardMaterial({ color: type === 'jet' ? 0x5f6975 : sp.color, metalness: 0.45, roughness: 0.35 });
-  const accent = new THREE.MeshStandardMaterial({ color: sp.accent, metalness: 0.4, roughness: 0.3 });
+export function buildAircraft(type, callsign = 'ALPHA-1', liveryId = 'default') {
+  const L0 = LIVERIES.find((l) => l.id === liveryId) || LIVERIES[0]; const custom = L0.id !== 'default';
+  const sp = custom ? { ...SPECS[type], color: L0.color, accent: L0.accent } : SPECS[type]; const root = new THREE.Group(); const parts = { ailL: null, ailR: null, elev: null, rudder: null, gear: [], props: [], burners: [], strobes: [], flaps: [] };
+  const skin = new THREE.MeshStandardMaterial({ map: livery(sp, type, callsign, custom), metalness: custom ? L0.metal : type === 'jet' ? 0.55 : 0.35, roughness: custom ? L0.rough : type === 'jet' ? 0.45 : 0.28 });
+  const paint = new THREE.MeshStandardMaterial({ color: type === 'jet' && !custom ? 0x5f6975 : sp.color, metalness: custom ? L0.metal : 0.45, roughness: custom ? L0.rough : 0.35 });
+  const accent = new THREE.MeshStandardMaterial({ color: sp.accent, metalness: 0.4, roughness: 0.3, emissive: L0.glow ? sp.accent : 0x000000, emissiveIntensity: L0.glow ? 1.5 : 0 });
   const dark = new THREE.MeshStandardMaterial({ color: 0x1a1d22, metalness: 0.7, roughness: 0.35 });
   const metal = new THREE.MeshStandardMaterial({ color: 0xb8bec6, metalness: 1, roughness: 0.22 });
   const glass = new THREE.MeshPhysicalMaterial({ color: type === 'jet' ? 0xc9a24a : 0x223344, metalness: 0.2, roughness: 0.02, transparent: true, opacity: 0.55, clearcoat: 1, envMapIntensity: 2.5 });

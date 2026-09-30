@@ -7,6 +7,9 @@ import { World, RWY, AIRPORT_H, SIZE } from './world.js';
 import { buildAircraft, animateAircraft, SPECS } from './aircraft.js';
 import { Audio } from './audio.js';
 import { Dashboard, spark } from './dashboard.js';
+import { Progress, ACHIEVEMENTS, xpForLevel } from './progress.js';
+import { Missions, MISSIONS } from './missions.js';
+import { Garage } from './garage.js';
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -48,7 +51,8 @@ function spawn() {
   if (fireLight) { scene.remove(fireLight); fireLight = null; } fireSrc = null;
   $('#crashPanel')?.classList.add('hidden'); for (const d of debris) scene.remove(d.m); debris.length = 0;
   if (plane) scene.remove(plane);
-  plane = buildAircraft(cfg.type, cfg.name); spec = SPECS[cfg.type]; scene.add(plane);
+  plane = buildAircraft(cfg.type, cfg.name, progress.p.livery[cfg.type]); spec = SPECS[cfg.type]; scene.add(plane);
+  S.airT = 0; S.distAcc = 0; S.lowT = 0; S.xpAcc = 0; S.from = null; missions?.clear();
   S.crashed = false; S.onGround = cfg.spawn === 'runway'; S.airborne = !S.onGround; S.touch = null; S.maxAlt = 0; S.maxSpd = 0; S.t0 = performance.now();
   if (cfg.spawn === 'runway') {
     S.pos.set(RWY.x, AIRPORT_H + spec.gearH, RWY.len / 2 - spec.len - 40); S.quat.identity(); S.vel.set(0, 0, 0); S.throttle = 0; S.gear = true; S.gearAnim = 1; S.flaps = cfg.type === 'jet' ? 0 : 0.33; S.brake = true;
@@ -129,6 +133,7 @@ function physics(dt) {
     _e.setFromQuaternion(S.quat, 'YXZ'); const bank = _e.z, pit = _e.x;
     if (settings.assist) {
       if (pin > 0 && aoa > 0.17) pin *= Math.max(0, 1 - (aoa - 0.17) / 0.08); // protection décrochage
+      if (pin > 0 && speed < spec.stall * 1.3) pin *= Math.max(0, (speed - spec.stall * 0.9) / (spec.stall * 0.4)); // pas de cabré sans vitesse
       if (pin > 0 && pit > 0.6) pin *= 0.2; if (pin < 0 && pit < -0.6) pin *= 0.2;  // limites d'assiette
     }
     let extra = 0;
@@ -178,7 +183,7 @@ function physics(dt) {
     S.pos.addScaledVector(S.vel, dt);
     const gh = world.height(S.pos.x, S.pos.z);
     if (S.onGround) { S.pos.y = gh + spec.gearH; if (!world.onPaved(S.pos.x, S.pos.z)) { grass = true; } else grass = false; if (gh < 1.5) crash('AMERRISSAGE'); }
-    if (!S.onGround) { S.airborne = true; atc(`${cfg.name}, décollage à ${hhmm()}, bon vol.`); toast('DÉCOLLAGE', 'V-rotation ✓', 1500); }
+    if (!S.onGround) { S.airborne = true; atc(`${cfg.name}, décollage à ${hhmm()}, bon vol.`); toast('DÉCOLLAGE', 'V-rotation ✓', 1500); S.from = missions.nearestAirport(S.pos); S.touch = null; progress.add(50, 'Décollage'); progress.unlock('takeoff'); progress.p.stats.flights++; progress.save(); }
     // fin de vol archivée après atterrissage et arrêt complet
     if (S.touch && ns < 2 && !S.touch.archived) { S.touch.archived = true; archive(true); }
     return;
@@ -219,6 +224,13 @@ function touchdown(gh, clear) {
   toast(`<span style="color:${grade[1]}">${grade[0]}</span>`, `${fpm.toFixed(0)} ft/min · +${pts} pts${paved ? '' : ' · hors piste'}`, 3500);
   atc(`${cfg.name}, bel atterrissage (${fpm.toFixed(0)} ft/min). Dégagez à droite.`);
   if (S.gear === false) S.gear = true;
+  // --- progression
+  const st = progress.p.stats, ap = missions.nearestAirport(S.pos), onRwy = world.onRunway(S.pos.x, S.pos.z);
+  progress.add(50 + pts * 0.5, 'Atterrissage ' + grade[0].replace(' !', '')); progress.unlock('landing'); if (fpm < 180) progress.unlock('butter');
+  st.landings++; st.planes[cfg.type] = 1; if (Object.keys(st.planes).length >= 3) progress.unlock('allplanes');
+  if (onRwy) { st.airports[ap.name] = 1; if (Object.keys(st.airports).length >= 3) progress.unlock('airports3'); if (S.from && S.from !== ap) progress.add(300, 'Nouvel aéroport : ' + ap.name); }
+  if (world.night > 0.5) progress.unlock('night');
+  progress.save(); missions.onLand(S, S.touch);
 }
 function crash(reason) {
   if (S.crashed) return; S.crashed = true; S.onGround = false;
@@ -227,7 +239,7 @@ function crash(reason) {
   toast('<span style="color:#f87171">CRASH</span>', reason, 4000); shake = 1.2;
   $('#crashReason').textContent = reason; setTimeout(() => S.crashed && $('#crashPanel').classList.remove('hidden'), 3000);
   atc(`MAYDAY — ${cfg.name} : ${reason.toLowerCase()}. Secours en route.`);
-  S.touch = { fpm: -S.vel.y * 196.85, grade: 'CRASH', pts: 0 }; archive(false);
+  S.touch = { fpm: -S.vel.y * 196.85, grade: 'CRASH', pts: 0 }; archive(false); missions.onCrash(); progress.p.stats.crashes++; progress.save();
   S.vel.set(0, 0, 0);
 }
 
@@ -313,7 +325,7 @@ function updateCamera(dt) {
     if (cineAnchor.distanceTo(S.pos) > 900 || cineAnchor.y < -1e8) { cineAnchor.copy(S.pos).addScaledVector(S.vel.lengthSq() > 1 ? S.vel.clone().normalize() : _f, 500).add(new THREE.Vector3((Math.random() - 0.5) * 120, 0, (Math.random() - 0.5) * 120)); cineAnchor.y = Math.max(world.height(cineAnchor.x, cineAnchor.z) + 4, S.pos.y + (Math.random() - 0.3) * 40); }
     camera.position.copy(cineAnchor); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(2400 / cineAnchor.distanceTo(S.pos), 8, 60);
   } else {
-    const tw = world.towers.reduce((b, t) => (t.distanceTo(S.pos) < b.distanceTo(S.pos) ? t : b)); camera.position.copy(tw); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan((spec.len * 2.2) / camera.position.distanceTo(S.pos))), 2, 50); plane.visible = true;
+    const tw = world.towers.reduce((b, t) => (t.distanceTo(S.pos) < b.distanceTo(S.pos) ? t : b)); if (tw.distanceTo(S.pos) > 9000) { camMode = 0; $('#camName').textContent = CAMS[0]; toast('TOUR HORS DE PORTÉE', 'rapprochez-vous d\'un aéroport', 1500); return; } camera.position.copy(tw); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan((spec.len * 2.2) / camera.position.distanceTo(S.pos))), 2, 50); plane.visible = true;
   }
   camera.updateProjectionMatrix();
 }
@@ -347,6 +359,16 @@ function drawHUD(fps) {
   hx.save(); hx.beginPath(); hx.rect(cx - 180, 96, 360, 34); hx.clip();
   for (let h = Math.floor(hdg - 30); h <= hdg + 30; h++) { if (h % 5) continue; const x = cx + (h - hdg) * 6; const hh = ((h % 360) + 360) % 360; hx.beginPath(); hx.moveTo(x, 120); hx.lineTo(x, h % 10 ? 126 : 130); hx.stroke(); if (h % 10 === 0) { const lab = { 0: 'N', 90: 'E', 180: 'S', 270: 'O' }[hh] ?? String(hh / 10).padStart(2, '0'); hx.fillText(lab, x - 7, 114); } }
   hx.restore(); hx.beginPath(); hx.moveTo(cx, 131); hx.lineTo(cx - 6, 139); hx.lineTo(cx + 6, 139); hx.fill();
+  // marqueur d'objectif de mission
+  const tgt = missions.target();
+  if (tgt) {
+    const v = tgt.clone().project(camera), dist = (S.pos.distanceTo(tgt) / 1000).toFixed(1) + ' km';
+    let sx = (v.x * 0.5 + 0.5) * W, sy = (-v.y * 0.5 + 0.5) * H; const behind = v.z > 1;
+    hx.save(); hx.strokeStyle = hx.fillStyle = '#fbbf24'; hx.lineWidth = 2;
+    if (!behind && sx > 40 && sx < W - 40 && sy > 60 && sy < H - 40) { hx.beginPath(); hx.moveTo(sx, sy - 12); hx.lineTo(sx + 12, sy); hx.lineTo(sx, sy + 12); hx.lineTo(sx - 12, sy); hx.closePath(); hx.stroke(); hx.fillText(dist, sx + 16, sy + 4); }
+    else { let dx = sx - W / 2, dy = sy - H / 2; if (behind) { dx = -dx; dy = -dy; } const a = Math.atan2(dy, dx), r = Math.min(W, H) * 0.38; const ex = W / 2 + Math.cos(a) * r, ey = H / 2 + Math.sin(a) * r; hx.translate(ex, ey); hx.rotate(a); hx.beginPath(); hx.moveTo(16, 0); hx.lineTo(-8, -10); hx.lineTo(-8, 10); hx.closePath(); hx.fill(); hx.rotate(-a); hx.fillText(dist, 14, 20); }
+    hx.restore();
+  }
   // infos
   const vs = S.vel.y * 196.85, agl = (S.pos.y - world.height(S.pos.x, S.pos.z) - spec.gearH) * 3.281;
   hx.fillText(`VS ${vs >= 0 ? '+' : ''}${vs.toFixed(0)}`, cx + 262, cy + 175); hx.fillText(`AGL ${Math.max(0, agl).toFixed(0)}`, cx + 262, cy + 191);
@@ -366,6 +388,7 @@ function drawMinimap() {
   mx.imageSmoothingEnabled = true; mx.drawImage(world.mapCanvas, 0, 0);
   // trace
   mx.strokeStyle = '#f472b6'; mx.lineWidth = 0.4; mx.beginPath(); telemetry.track.forEach(([x, z], i) => { const X = (x + SIZE / 2) * s, Z = (z + SIZE / 2) * s; i ? mx.lineTo(X, Z) : mx.moveTo(X, Z); }); mx.stroke();
+  const mt = missions.target(); if (mt) { mx.fillStyle = '#fbbf24'; mx.beginPath(); mx.arc((mt.x + SIZE / 2) * s, (mt.z + SIZE / 2) * s, 1.4, 0, 7); mx.fill(); }
   for (const o of others.values()) { mx.fillStyle = '#fbbf24'; mx.beginPath(); mx.arc((o.pos.x + SIZE / 2) * s, (o.pos.z + SIZE / 2) * s, 0.9, 0, 7); mx.fill(); }
   mx.restore();
   mx.fillStyle = '#fff'; mx.beginPath(); mx.moveTo(110, 100); mx.lineTo(103, 118); mx.lineTo(110, 114); mx.lineTo(117, 118); mx.fill();
@@ -393,7 +416,17 @@ function updateUI(dt) {
 
 // ---------------------------------------------------------------- Télémétrie + archivage
 let sampleT = 0;
+function flightXP(dt) {
+  if (S.crashed || S.onGround) return; const spd = S.vel.length(), agl = S.pos.y - world.height(S.pos.x, S.pos.z), st = progress.p.stats;
+  S.airT += dt; S.distAcc += spd * dt; st.time += dt; st.dist += spd * dt;
+  S.xpAcc += dt * 1.2; if (S.xpAcc >= 60) { progress.add(S.xpAcc, 'Temps de vol'); S.xpAcc = 0; }
+  if (S.distAcc > 5000) { S.distAcc -= 5000; progress.add(25, '5 km parcourus'); }
+  if (S.pos.y * 3.281 > st.maxAlt) st.maxAlt = S.pos.y * 3.281; if (spd * 1.944 > st.maxSpd) st.maxSpd = spd * 1.944;
+  if (S.pos.y * 3.281 > 10000) progress.unlock('alt10k'); if (spd * 1.944 > 450) progress.unlock('speed450');
+  if (agl < 30 && spd > 103) { S.lowT += dt; if (S.lowT > 10) progress.unlock('lowpass'); } else S.lowT = 0;
+}
 function record(dt) {
+  flightXP(dt);
   sampleT += dt; const ph = phaseName(); telemetry.phases[ph] = (telemetry.phases[ph] || 0) + dt;
   S.maxAlt = Math.max(S.maxAlt, S.pos.y * 3.281); S.maxSpd = Math.max(S.maxSpd, S.vel.length() * 1.944);
   if (sampleT < 0.5) return; sampleT = 0;
@@ -454,6 +487,7 @@ function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
+  if (garage?.open) { garage.render(); return; }
   if (!started) { // écran d'accueil : caméra cinématique autour de l'aéroport
     const a = t * 0.05; camera.position.set(Math.cos(a) * 420 + 150, AIRPORT_H + 70, Math.sin(a) * 420 + 1300); camera.lookAt(0, AIRPORT_H + 5, RWY.len / 2 - 60);
     world.update(t, camera.position); renderFrame(); return;
@@ -461,7 +495,7 @@ function loop() {
   if (!S.paused) {
     readInput(dt);
     const sub = 4; for (let i = 0; i < sub; i++) physics(dt / sub);
-    record(dt); updateParticles(dt);
+    record(dt); updateParticles(dt); missions.update(dt, S);
   }
   plane.position.copy(S.pos); plane.quaternion.copy(S.quat);
   animateAircraft(plane, S, dt, t);
@@ -480,6 +514,26 @@ function renderFrame() { if (composer) composer.render(); else renderer.render(s
 
 // ---------------------------------------------------------------- Démarrage & menus
 let started = false; const dash = new Dashboard();
+const progress = new Progress((lv, rank) => { toast(`<span style="color:#fbbf24">NIVEAU ${lv}</span>`, rank + ' · nouvelles livrées au garage', 3500); [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => audio.beep(f, 0.18, 0.07), i * 120)); });
+progress.load(localStorage.lastName || 'ALPHA-1'); $('#pName').value = progress.name;
+let missions = null, garage = null;
+function openModal(id) { document.querySelector(id).classList.remove('hidden'); }
+document.querySelectorAll('[data-close]').forEach((b) => (b.onclick = () => b.closest('.modal').classList.add('hidden')));
+$('#btnMissions').onclick = () => {
+  $('#missionList').innerHTML = MISSIONS.map((x) => `<button class="mcard" data-m="${x.id}"><div class="ic">${x.icon}</div><b>${x.name}</b><small>${x.desc}</small><em>🏆 ${x.xp} XP</em></button>`).join('');
+  $('#missionList').querySelectorAll('button').forEach((b) => (b.onclick = () => { $('#missionsModal').classList.add('hidden'); if (!started) $('#go').click(); missions.start(b.dataset.m, S); }));
+  openModal('#missionsModal');
+};
+$('#btnCareer').onclick = () => {
+  const p = progress.p, st = p.stats, lv = progress.level;
+  $('#careerBody').innerHTML = `<div style="display:flex;gap:14px;align-items:center;margin-bottom:12px"><div style="width:64px;height:64px;border-radius:50%;display:grid;place-items:center;font-size:28px;font-weight:800;background:linear-gradient(135deg,#fbbf24,#f472b6)">${lv}</div><div><h3>${progress.name}</h3><div style="color:#fde68a">${progress.rank} · ${p.xp} XP (prochain niveau : ${xpForLevel(lv + 1)})</div></div></div>
+  <div class="cstats"><div><small>Vols</small><b>${st.flights}</b></div><div><small>Atterrissages</small><b>${st.landings}</b></div><div><small>Crashs</small><b>${st.crashes}</b></div><div><small>Heures</small><b>${(st.time / 3600).toFixed(2)}</b></div><div><small>Distance</small><b>${(st.dist / 1000).toFixed(0)} km</b></div><div><small>Alt. max</small><b>${Math.round(st.maxAlt)} ft</b></div><div><small>V max</small><b>${Math.round(st.maxSpd)} kt</b></div><div><small>Aéroports</small><b>${Object.keys(st.airports).length}/3</b></div></div>
+  <h3 style="margin-top:14px">Succès ${Object.keys(p.ach).length}/${ACHIEVEMENTS.length}</h3><div class="achgrid">${ACHIEVEMENTS.map((a) => `<div class="ach ${p.ach[a.id] ? '' : 'off'}"><span>${a.icon}</span><div><b>${a.name}</b><small>${a.desc}</small></div></div>`).join('')}</div>`;
+  openModal('#careerModal');
+};
+function setPlanePick(type) { cfg.type = type; document.querySelectorAll('#planePick button').forEach((b) => b.classList.toggle('on', b.dataset.p === type)); }
+const openGarage = () => { audio.init(); garage.show(cfg.type); };
+$('#btnGarage').onclick = openGarage; $('#goGarage').onclick = openGarage;
 function pick(sel, key) { document.querySelectorAll(sel + ' button').forEach((b) => b.addEventListener('click', () => { document.querySelectorAll(sel + ' button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); cfg[key] = b.dataset[key[0]]; })); }
 pick('#planePick', 'p'); pick('#spawnPick', 's'); pick('#modePick', 'm');
 // mapping cfg keys
@@ -487,7 +541,7 @@ document.querySelectorAll('#planePick button').forEach((b) => b.addEventListener
 document.querySelectorAll('#spawnPick button').forEach((b) => b.addEventListener('click', () => (cfg.spawn = b.dataset.s)));
 document.querySelectorAll('#modePick button').forEach((b) => b.addEventListener('click', () => (cfg.mode = b.dataset.m)));
 $('#go').addEventListener('click', () => {
-  cfg.name = ($('#pName').value || 'ALPHA-1').toUpperCase(); $('#start').classList.add('hidden'); started = true;
+  cfg.name = ($('#pName').value || 'ALPHA-1').toUpperCase(); localStorage.lastName = cfg.name; progress.load(cfg.name); $('#start').classList.add('hidden'); started = true;
   audio.init(); audio.setVolume(+$('#vol').value); spawn();
   if (cfg.mode === 'lan') { $('#netState').textContent = '● LAN connexion…'; addChat('Multijoueur LAN actif — appuyez sur <b>T</b> pour discuter.'); }
 });
@@ -516,7 +570,10 @@ $('#loadInfo').textContent = 'Génération du monde…';
 setTimeout(() => {
   const t0 = performance.now();
   world = new World(renderer, scene, quality); world.setTime(params.get('tod') || 'day'); applyQuality();
+  missions = new Missions(scene, world, progress, toast);
+  garage = new Garage(renderer, progress, (type) => { setPlanePick(type); if (started) spawn(); });
+  addEventListener('resize', () => garage.resize());
   $('#loadInfo').textContent = `Monde prêt (${((performance.now() - t0) / 1000).toFixed(1)} s) · 60 × 60 km · 3 aéroports · 5 villes`;
-  window.__sim = { simulate: (sec, inp = {}) => { const dt = 1 / 120; for (let i = 0; i < sec * 120; i++) { Object.assign(S, inp); physics(dt); } }, particles, camera, get plane() { return plane; }, S, cfg, spawn, get world() { return world; }, cycleCam, start: () => $('#go').click() };
+  window.__sim = { get garage() { return garage; }, get missions() { return missions; }, progress, simulate: (sec, inp = {}) => { const dt = 1 / 120; for (let i = 0; i < sec * 120; i++) { Object.assign(S, inp); physics(dt); } }, particles, camera, get plane() { return plane; }, S, cfg, spawn, get world() { return world; }, cycleCam, start: () => $('#go').click() };
   loop();
 }, 30);

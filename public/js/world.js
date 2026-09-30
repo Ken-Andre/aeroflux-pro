@@ -424,7 +424,7 @@ export class World {
     g.putImageData(img, 0, 0);
     const s = N / SIZE; g.fillStyle = '#eee'; for (const a of AIRPORTS) g.fillRect(N / 2 + a.x * s - 1.5, N / 2 + (a.z - RWY.len / 2) * s, 3, RWY.len * s);
     g.strokeStyle = 'rgba(230,200,120,.8)'; g.lineWidth = 1; for (const r of this.roads || []) { g.beginPath(); r.forEach((p, i) => (i ? g.lineTo(N / 2 + p.x * s, N / 2 + p.z * s) : g.moveTo(N / 2 + p.x * s, N / 2 + p.z * s))); g.stroke(); }
-    g.fillStyle = '#fff'; g.font = 'bold 8px system-ui'; for (const c of CITIES) g.fillText(c.name, N / 2 + c.x * s - 14, N / 2 + c.z * s - c.r * s - 2);
+
     return c;
   }
   update(t, focus) {
