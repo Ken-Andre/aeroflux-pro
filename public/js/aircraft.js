@@ -83,18 +83,27 @@ export function buildAircraft(type, callsign = 'ALPHA-1') {
       add(new THREE.CylinderGeometry(0.1, 0.1, 2.6).rotateX(Math.PI / 2), metal, s * 6.15, -0.38, 1.1);
     }
     // empennage double
-    const fin = wing(2.8, 3.2, 1.2, 2.4, 0.14);
-    for (const s of [-1, 1]) { const f = add(fin, paint, s * 0.8, 0.6, 4.2); f.scale.x = s; f.rotation.z = s * (Math.PI / 2 - 0.35); }
+    const fin = wing(2.3, 3.0, 1.1, 2.2, 0.12);
+    for (const s of [-1, 1]) { const f = add(fin, paint, s * 0.8, 0.6, 4.2); f.scale.x = s; f.rotation.z = s * (Math.PI / 2 - 0.42); }
     const rud = hinge(0, 0, 0); parts.rudder = rud;
     for (const s of [-1, 1]) { const hs = add(wing(2.6, 2.4, 1, 1.6, 0.12), paint, s * 1.1, -0.1, 5.6); hs.scale.x = s; }
     parts.elev = hinge(0, -0.1, 7.6);
     add(new THREE.BoxGeometry(6.2, 0.1, 0.6), accent, 0, 0, 0.1, parts.elev);
     // tuyères + postcombustion
+    // tuyères détaillées : carénage, pétales titane, cavité sombre, cône central + flamme
+    const titan = new THREE.MeshStandardMaterial({ color: 0x8a7f74, metalness: 1, roughness: 0.35 });
+    const inner = new THREE.MeshStandardMaterial({ color: 0x0c0c0e, roughness: 0.9, side: THREE.BackSide });
+    add(lathe([[0.6, -0.3], [1.1, 0.6], [1.05, 1.0], [0.3, 1.1]], 32), skin, 0, 0, 7.2).scale.set(1.15, 0.55, 1); // carénage entre tuyères
     for (const s of [-1, 1]) {
-      add(lathe([[0.55, 0], [0.5, 1.6], [0.45, 1.7], [0.35, 1.7]], 24), metal, s * 0.55, 0, 7.4);
-      const bm = new THREE.MeshBasicMaterial({ color: 0x66ccff, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
-      const b = add(new THREE.ConeGeometry(0.42, 4, 16, 1, true).rotateX(-Math.PI / 2), bm, s * 0.55, 0, 11.1); b.castShadow = false; parts.burners.push(b);
-      const core = add(new THREE.CircleGeometry(0.42, 16), new THREE.MeshBasicMaterial({ color: 0xff9a40, toneMapped: false }), s * 0.55, 0, 9.12); core.castShadow = false;
+      const x = s * 0.62;
+      add(lathe([[0.56, 0], [0.54, 0.9], [0.5, 1.2]], 32), metal, x, 0, 7.6);
+      for (let k = 0; k < 12; k++) { const pet = add(new THREE.BoxGeometry(0.2, 0.025, 0.55), titan, 0, 0, 0); const a = (k / 12) * Math.PI * 2; pet.position.set(x + Math.cos(a) * 0.46, Math.sin(a) * 0.46, 9.05); pet.rotation.z = a + Math.PI / 2; pet.rotateX(-0.12); }
+      add(new THREE.CylinderGeometry(0.44, 0.44, 1.4, 24, 1, true).rotateX(Math.PI / 2), inner, x, 0, 8.6);
+      const core = add(new THREE.ConeGeometry(0.22, 0.5, 20).rotateX(Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x222226, emissive: 0xff7a2a, emissiveIntensity: 0.2, metalness: 0.6, roughness: 0.5 }), x, 0, 8.2); core.castShadow = false; parts.cores = (parts.cores || []).concat(core);
+      const bm = new THREE.MeshBasicMaterial({ color: 0x7fc8ff, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+      const b = add(new THREE.ConeGeometry(0.4, 3.6, 20, 1, true).rotateX(-Math.PI / 2), bm, x, 0, 11.1); b.castShadow = false; parts.burners.push(b);
+      const bm2 = bm.clone(); bm2.color.set(0xffa050);
+      const b2 = add(new THREE.ConeGeometry(0.3, 1.6, 16, 1, true).rotateX(-Math.PI / 2), bm2, x, 0, 10.0); b2.castShadow = false; parts.burners.push(b2);
     }
   } else if (type === 'cargo') {
     const prof = [[0, -22], [0.8, -21.5], [1.6, -19], [2.2, -14], [2.55, -8], [2.6, 0], [2.6, 8], [2.4, 13], [2.0, 16], [1.4, 18.6], [0.9, 20.2], [0.3, 21.5], [0, 22]];
@@ -179,6 +188,7 @@ export function animateAircraft(obj, st, dt, t) {
   for (const pr of p.props) pr.rotation.z += dt * (8 + st.throttle * 60);
   if (p.disc) p.disc.material.opacity = Math.min(0.35, st.throttle * 0.5 + 0.08);
   for (const b of p.burners) { b.material.opacity = Math.max(0, (st.throttle - 0.55) * 2) * (0.7 + Math.random() * 0.3); b.scale.set(1, 1, 0.6 + st.throttle * 0.8); }
+  if (p.cores) for (const c of p.cores) c.material.emissiveIntensity = 0.3 + st.throttle * 3;
   const on = (t % 1.2) < 0.08; for (const s of p.strobes) s.visible = on;
   p.landingLight.intensity = st.gear ? 400 : 0;
 }

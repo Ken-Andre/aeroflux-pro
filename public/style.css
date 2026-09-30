@@ -101,3 +101,9 @@ td{padding:5px;border-top:1px solid rgba(255,255,255,.06)}
 #chatIn{position:fixed;left:250px;bottom:20px;width:360px;padding:10px 12px;color:#fff;font:inherit;z-index:9;outline:none}
 #chatLog{position:fixed;left:250px;bottom:64px;z-index:5;font-size:12px;text-shadow:0 1px 3px #000;max-width:380px}
 #chatLog div{opacity:.95;margin-top:2px}
+
+#crashPanel{position:fixed;left:0;right:0;margin:auto;bottom:24px;padding:22px 26px;z-index:25;width:min(560px,92vw);text-align:center;animation:rise .5s both}
+#crashPanel h2{color:#f87171;letter-spacing:.1em;margin-bottom:4px}#crashPanel p{color:#cbd5e1;margin-bottom:14px}#crashPanel small{display:block;margin-top:10px;color:#8ea3c0}
+body.immersive #top,body.immersive #hudCards,body.immersive #help,body.immersive #phase,body.immersive #widgets{opacity:0;pointer-events:none;transition:opacity .4s}
+body.immersive #top:hover{opacity:1;pointer-events:auto}
+body.immersive #minimap{transform:scale(.8);transform-origin:bottom left}
