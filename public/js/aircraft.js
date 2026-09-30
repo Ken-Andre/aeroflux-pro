@@ -2,8 +2,8 @@ import * as THREE from 'three';
 
 // Caractéristiques de vol + géométrie de chaque appareil (avant = -Z, haut = +Y, droite = +X)
 export const SPECS = {
-  jet:   { name: 'Vortex X1',   mass: 11000, S: 38,  thrust: 150000, cd0: 0.022, len: 17,  gearH: 2.05, vr: 72,  stall: 58, color: 0x8e99a6, accent: 0x1e3a8a, roll: 2.6, pitch: 1.1, yaw: 0.4, cam: 26 },
-  cargo: { name: 'Atlas C-9',   mass: 70000, S: 260, thrust: 480000, cd0: 0.024, len: 44,  gearH: 4.3, vr: 70,  stall: 55, color: 0xf2f4f7, accent: 0x0e7490, roll: 0.9, pitch: 0.55, yaw: 0.25, cam: 70 },
+  jet:   { name: 'Vortex X1',   mass: 11000, S: 38,  thrust: 100000, cd0: 0.022, len: 17,  gearH: 2.05, vr: 72,  stall: 58, color: 0x8e99a6, accent: 0x1e3a8a, roll: 2.6, pitch: 1.1, yaw: 0.4, cam: 26 },
+  cargo: { name: 'Atlas C-9',   mass: 70000, S: 260, thrust: 420000, cd0: 0.024, len: 44,  gearH: 4.3, vr: 70,  stall: 55, color: 0xf2f4f7, accent: 0x0e7490, roll: 0.9, pitch: 0.55, yaw: 0.25, cam: 70 },
   prop:  { name: 'Sparrow 172', mass: 1100,  S: 16,  thrust: 5200,  cd0: 0.03,  len: 8.3, gearH: 1.2, vr: 30,  stall: 24, color: 0xf8fafc, accent: 0xdc2626, roll: 1.6, pitch: 0.9, yaw: 0.5, cam: 16 },
 };
 

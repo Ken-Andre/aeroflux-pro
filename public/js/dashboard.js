@@ -81,8 +81,8 @@ export class Dashboard {
         g.fillRect(W * 0.64, 14 + i * 18, 9, 9); g.fillStyle = '#cbd5e1'; g.font = '10.5px system-ui'; g.fillText(`${k.slice(0, 14)} ${Math.round((v / tot) * 100)}%`, W * 0.64 + 14, 22 + i * 18); });
       g.fillStyle = '#fff'; g.font = '700 16px system-ui'; g.textAlign = 'center'; g.fillText(`${Math.round(tot)}s`, cx, cy + 5); g.textAlign = 'left'; }
     { const [g, W, H] = fit($('#cTrack')); g.clearRect(0, 0, W, H); if (!world) return; const sz = Math.min(W, H); const ox = (W - sz) / 2, oy = (H - sz) / 2;
-      g.save(); g.beginPath(); g.roundRect(ox, oy, sz, sz, 12); g.clip(); g.drawImage(world.mapCanvas, ox, oy, sz, sz); const s = sz / 30000;
-      g.strokeStyle = '#f472b6'; g.lineWidth = 2; g.shadowColor = '#f472b6'; g.shadowBlur = 8; g.beginPath(); tel.track.forEach(([x, z], i) => (i ? g.lineTo(ox + (x + 15000) * s, oy + (z + 15000) * s) : g.moveTo(ox + (x + 15000) * s, oy + (z + 15000) * s))); g.stroke(); g.shadowBlur = 0;
-      g.fillStyle = '#fff'; g.beginPath(); g.arc(ox + (S.pos.x + 15000) * s, oy + (S.pos.z + 15000) * s, 4, 0, 7); g.fill(); g.restore(); }
+      g.save(); g.beginPath(); g.roundRect(ox, oy, sz, sz, 12); g.clip(); g.drawImage(world.mapCanvas, ox, oy, sz, sz); const s = sz / 60000;
+      g.strokeStyle = '#f472b6'; g.lineWidth = 2; g.shadowColor = '#f472b6'; g.shadowBlur = 8; g.beginPath(); tel.track.forEach(([x, z], i) => (i ? g.lineTo(ox + (x + 30000) * s, oy + (z + 30000) * s) : g.moveTo(ox + (x + 30000) * s, oy + (z + 30000) * s))); g.stroke(); g.shadowBlur = 0;
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(ox + (S.pos.x + 30000) * s, oy + (S.pos.z + 30000) * s, 4, 0, 7); g.fill(); g.restore(); }
   }
 }

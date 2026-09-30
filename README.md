@@ -12,24 +12,22 @@ Ouvrez `http://localhost:8080`. Pour le **multijoueur LAN**, les autres joueurs 
 ## Commandes
 | Action | Touches |
 |---|---|
-| Tangage | ↑/↓ ou Z/S (W/S) |
-| Roulis | ←/→ ou Q/D |
-| Lacet / direction au sol | A / E |
-| Poussée | Maj / Ctrl, R / F, 0-9 |
-| Train · Volets · Freins | G · V · B |
+| Piquer / cabrer | W (ou Z, ↑) / S (↓) — `I` pour inverser |
+| Roulis | A / D (←/→) |
+| Lacet / direction au sol | Q / E |
+| Poussée | Shift / Ctrl (ou R / F / X, 0-9) |
+| Freins | Espace (maintenir) · B frein de parc |
+| Train · Volets | G · V |
 | Caméra (poursuite, cockpit, cinéma, tour, orbitale) | C + clic-glisser + molette |
-| Widgets · Pause · Musique · Chat | H · P · N · T |
+| Widgets · Chat · Pause · Musique | H · T · P · N |
+| Assistance de vol ON/OFF | L |
 
-Manette supportée (Gamepad API).
+> Chrome : Ctrl+W ferme l'onglet — pour réduire la poussée en piquant, utilisez F ou X.
 
-## Atterrir (vs crasher)
-Le toucher est évalué : train sorti, taux de chute < 1100 ft/min, inclinaison < 16°, assiette −7°…20°, sol praticable.
-Note : Butter < 180 ft/min, Doux < 400, Correct < 700, Dur sinon. Bonus d'alignement sur l'axe.
-Aides : PAPI (4 feux blancs/rouges), widget ILS (H), départ « Finale 5 km ».
+**Assistance de vol (par défaut)** : ailes remises à plat automatiquement, tenue d'assiette, limites ±20°, protection décrochage et basse vitesse, compensation en virage. Désactivable avec `L` pour un vol libre.
 
-## Contenu
-- Île de 30×30 km : relief 513², textures détail multi-échelle + normal map, océan réfléchissant, ciel physique, nuages, 28 000 arbres instanciés, ville instanciée éclairée la nuit, aéroport (piste texturée 3,2 km, taxiway, tarmac, hangars, tour, balisage lumineux, manche à air).
-- 3 avions détaillés : gouvernes animées, train rentrant, hélice/réacteurs, postcombustion, feux nav/strobe, phare d'atterrissage, livrées.
-- Jour / Sunset / Nuit, qualité Perf / Haute / Ultra (bloom), mode cinéma 21:9, plein écran.
-- 4 musiques génératives + sons moteur/vent/effets (Web Audio, hors-ligne).
-- Dashboard analytique : KPIs animés, profil de vol live, trajectoire satellite, jauge G, phases, scores, qualité d'atterrissage, journal (stocké dans `data/flights.json`).
+**Décoller** : Shift jusqu'à 100 % → au message « ROTATION », maintenir S.
+**Atterrir** : départ « Finale 5 km », train sorti, volets (V), réduire la poussée, suivre PAPI/ILS, taux de chute < 1100 ft/min.
+
+## Monde
+Île de 60 × 60 km : 3 aéroports, 5 villes, routes, lac, 3 parcs éoliens, cargos et bateaux, montagnes enneigées, couloirs d'approche dégagés.

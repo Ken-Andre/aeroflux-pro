@@ -44,6 +44,7 @@ let plane = null, spec = null;
 const telemetry = { samples: [], phases: {}, track: [] };
 
 function spawn() {
+  rotHint = false;
   if (fireLight) { scene.remove(fireLight); fireLight = null; } fireSrc = null;
   $('#crashPanel')?.classList.add('hidden'); for (const d of debris) scene.remove(d.m); debris.length = 0;
   if (plane) scene.remove(plane);
@@ -61,7 +62,7 @@ function spawn() {
 }
 
 // ---------------------------------------------------------------- Entrées
-const keys = {};
+const keys = {}; const settings = { assist: localStorage.assist !== '0', invert: localStorage.invert === '1' };
 addEventListener('keydown', (e) => {
   if (document.activeElement === $('#chatIn') || (document.activeElement?.tagName === 'INPUT' && document.activeElement.type === 'text')) { if (e.key === 'Enter' && document.activeElement === $('#chatIn')) sendChat(); if (e.key === 'Escape') $('#chatIn').blur(); return; }
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
@@ -71,6 +72,8 @@ addEventListener('keydown', (e) => {
   if (k === 'KeyG' && S.onGround) toast('TRAIN VERROUILLÉ', 'au sol', 1200);
   if (k === 'KeyV') { S.flaps = S.flaps >= 0.99 ? 0 : Math.round((S.flaps + 0.34) * 3) / 3; audio.beep(600, 0.1, 0.06); }
   if (k === 'KeyB') S.brake = !S.brake;
+  if (k === 'KeyL') { settings.assist = !settings.assist; localStorage.assist = settings.assist ? '1' : '0'; toast('ASSISTANCE ' + (settings.assist ? 'ON' : 'OFF'), settings.assist ? 'ailes à plat auto · anti-décrochage' : 'mode pilote expert', 1600); }
+  if (k === 'KeyI') { settings.invert = !settings.invert; localStorage.invert = settings.invert ? '1' : '0'; toast('TANGAGE ' + (settings.invert ? 'INVERSÉ' : 'NORMAL'), settings.invert ? 'W = cabrer' : 'S = cabrer', 1600); }
   if (k === 'KeyC') cycleCam();
   if (k === 'KeyH') $('#widgets').classList.toggle('hidden');
   if (k === 'KeyP') S.paused = !S.paused;
@@ -89,15 +92,17 @@ $('#gl').addEventListener('wheel', (e) => { orbit.zoom = THREE.MathUtils.clamp(o
 
 function readInput(dt) {
   const gp = navigator.getGamepads?.()[0];
+  // convention : inPitch > 0 = cabrer (nez en haut). S/↓ = cabrer, W/Z/↑ = piquer (comme un manche)
   let p = (K('ArrowDown', 'KeyS') ? 1 : 0) - (K('ArrowUp', 'KeyW', 'KeyZ') ? 1 : 0);
-  let r = (K('ArrowRight', 'KeyD') ? 1 : 0) - (K('ArrowLeft', 'KeyA', 'KeyQ') && !K('KeyA') ? 1 : 0) - (K('KeyQ') ? 0 : 0);
-  r = (K('ArrowRight', 'KeyD') ? 1 : 0) - (K('ArrowLeft', 'KeyQ') ? 1 : 0);
-  let y = (K('KeyE', 'Period') ? 1 : 0) - (K('KeyA', 'Comma') ? 1 : 0);
-  if (gp) { if (Math.abs(gp.axes[1]) > 0.1) p = gp.axes[1]; if (Math.abs(gp.axes[0]) > 0.1) r = gp.axes[0]; if (Math.abs(gp.axes[2]) > 0.15) y = gp.axes[2]; if (gp.buttons[7]) S.throttle = Math.max(S.throttle, gp.buttons[7].value); if (gp.buttons[6]?.value > 0.2) S.throttle -= dt * 0.8; }
+  if (settings.invert) p = -p;
+  let r = (K('ArrowRight', 'KeyD') ? 1 : 0) - (K('ArrowLeft', 'KeyA') ? 1 : 0);
+  let y = (K('KeyE') ? 1 : 0) - (K('KeyQ') ? 1 : 0);
+  S.brakeHold = K('Space');
+  if (gp) { if (Math.abs(gp.axes[1]) > 0.1) p = -gp.axes[1] * (settings.invert ? -1 : 1); if (Math.abs(gp.axes[0]) > 0.1) r = gp.axes[0]; if (Math.abs(gp.axes[2]) > 0.15) y = gp.axes[2]; if (gp.buttons[7]) S.throttle = Math.max(S.throttle, gp.buttons[7].value); if (gp.buttons[6]?.value > 0.2) S.throttle -= dt * 0.8; }
   const sm = (a, b) => a + (b - a) * Math.min(1, dt * 6);
   S.inPitch = sm(S.inPitch, p); S.inRoll = sm(S.inRoll, r); S.inYaw = sm(S.inYaw, y);
   if (K('ShiftLeft', 'ShiftRight', 'KeyR')) S.throttle += dt * 0.5;
-  if (K('ControlLeft', 'ControlRight', 'KeyF')) S.throttle -= dt * 0.5;
+  if (K('ControlLeft', 'ControlRight', 'KeyF', 'KeyX')) S.throttle -= dt * 0.5;
   for (let i = 1; i <= 9; i++) if (keys['Digit' + i]) S.throttle = i / 9;
   if (keys.Digit0) S.throttle = 0;
   S.throttle = THREE.MathUtils.clamp(S.throttle, 0, 1);
@@ -113,15 +118,38 @@ function physics(dt) {
   axes();
   const speed = S.vel.length(), rho = 1.225 * Math.exp(-S.pos.y / 9000), q = 0.5 * rho * speed * speed;
   const inv = S.quat.clone().invert(); const vb = S.vel.clone().applyQuaternion(inv);
-  const u = Math.max(-vb.z, 0.1), aoa = Math.atan2(-vb.y, u), beta = Math.atan2(vb.x, u); S.aoa = aoa;
+  const u = Math.max(-vb.z, 0.1), aoa = speed < 3 ? 0 : Math.atan2(-vb.y, -vb.z), beta = speed < 3 ? 0 : Math.atan2(vb.x, u); S.aoa = aoa;
   const stallA = 0.27 + S.flaps * 0.03;
   let CL = 0.22 + 5.0 * aoa + S.flaps * 0.55; if (aoa > stallA) CL = (0.22 + 5 * stallA + S.flaps * 0.55) * Math.max(0.35, 1 - (aoa - stallA) * 4); if (aoa < -0.3) CL = -0.8;
   const auth = THREE.MathUtils.clamp(speed / (spec.stall * 1.1), 0.05, 1.3);
   // --- rotations (commandes + stabilité)
   if (!S.onGround) {
-    rotLocal(1, 0, 0, (-S.inPitch * spec.pitch * auth - aoa * 1.8 * auth) * dt);
-    rotLocal(0, 0, 1, (-S.inRoll * spec.roll * auth) * dt);
-    rotLocal(0, 1, 0, (-S.inYaw * spec.yaw * auth - beta * 2.2 * auth) * dt);
+    const aoaC = THREE.MathUtils.clamp(aoa, -0.6, 0.6), betaC = THREE.MathUtils.clamp(beta, -0.6, 0.6);
+    let pin = S.inPitch;
+    _e.setFromQuaternion(S.quat, 'YXZ'); const bank = _e.z, pit = _e.x;
+    if (settings.assist) {
+      if (pin > 0 && aoa > 0.17) pin *= Math.max(0, 1 - (aoa - 0.17) / 0.08); // protection décrochage
+      if (pin > 0 && pit > 0.6) pin *= 0.2; if (pin < 0 && pit < -0.6) pin *= 0.2;  // limites d'assiette
+    }
+    let extra = 0;
+    if (settings.assist) {
+      const flat = Math.max(0, 1 - Math.abs(bank) / 1.2);
+      if (pit > 0.35) extra -= (pit - 0.35) * 3; if (pit < -0.45) extra += (-0.45 - pit) * 3;          // assiette max +20° / -26°
+      if (Math.abs(pin) < 0.08) extra -= (pit - 0.03) * 0.7 * flat;
+      extra += Math.min(0.5, 1 - Math.cos(bank)) * 0.9;                                                // compensation en virage                                   // tenue d'assiette
+      const vmin = spec.stall * 1.2; if (speed < vmin) extra -= (1 - speed / vmin) * 1.6;              // protection basse vitesse
+    }
+    rotLocal(1, 0, 0, (pin * spec.pitch * auth - aoaC * 1.6 * auth + extra) * dt);
+    let rin = S.inRoll;
+    if (settings.assist) {
+      if (Math.abs(rin) < 0.08) rotLocal(0, 0, 1, -bank * 1.4 * auth * dt); // retour ailes à plat
+      if ((bank > 1.15 && rin < 0) || (bank < -1.15 && rin > 0)) rin = 0;   // inclinaison max ~65°
+      rotLocal(0, 1, 0, Math.sin(bank) * 0.25 * auth * dt); // virage coordonné
+    }
+    rotLocal(0, 0, 1, (-rin * spec.roll * auth) * dt);
+    rotLocal(0, 1, 0, (-S.inYaw * spec.yaw * auth - betaC * 2.0 * auth) * dt);
+    // en décrochage profond : le nez retombe doucement vers la trajectoire (pas de vrille incontrôlable)
+    if (Math.abs(aoa) > 0.5 && speed > 5) { const target = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, -1), S.vel.clone().normalize()); S.quat.slerp(target, Math.min(1, dt * 0.8)); }
   }
   // --- forces
   const m = spec.mass, acc = new THREE.Vector3(0, -9.81, 0);
@@ -138,12 +166,13 @@ function physics(dt) {
     const fwdSpeed = Math.max(0, S.vel.dot(_f.clone().setY(0).normalize()));
     let yaw = _e.y - (S.inYaw + S.inRoll * 0.6) * dt * THREE.MathUtils.clamp(8 / (fwdSpeed + 4), 0.08, 0.7) * Math.min(1, fwdSpeed / 3);
     let pitch = _e.x;
-    if (fwdSpeed > spec.vr * 0.85 && S.inPitch < -0.1) pitch += -S.inPitch * spec.pitch * 0.5 * dt; else pitch -= dt * 0.25;
+    if (fwdSpeed > spec.vr * 0.8 && S.inPitch > 0.1) pitch += S.inPitch * spec.pitch * 0.5 * dt; else pitch -= dt * 0.25;
+    if (fwdSpeed > spec.vr * 0.9 && S.inPitch < 0.1 && !S.touch && !rotHint) { rotHint = true; toast('ROTATION', 'maintenez S (ou ↓) pour décoller', 2500); }
     pitch = THREE.MathUtils.clamp(pitch, 0, 0.26);
     S.quat.setFromEuler(_e.set(pitch, yaw, 0, 'YXZ')); axes();
     const fh = _f.clone().setY(0).normalize();
-    let a = acc.dot(fh) - 9.81 * ((grass ? 0.07 : 0.02) + (S.brake ? (grass ? 0.3 : 0.45) : 0)) * Math.sign(fwdSpeed);
-    let ns = fwdSpeed + a * dt; if (ns < 0) ns = S.throttle > 0.05 ? 0 : 0; if (S.brake && ns < 0.4 && S.throttle < 0.1) ns = 0;
+    let a = acc.dot(fh) - 9.81 * ((grass ? 0.07 : 0.02) + ((S.brake || S.brakeHold) ? (grass ? 0.3 : 0.45) : 0)) * Math.sign(fwdSpeed);
+    let ns = fwdSpeed + a * dt; if (ns < 0) ns = S.throttle > 0.05 ? 0 : 0; if ((S.brake || S.brakeHold) && ns < 0.4 && S.throttle < 0.1) ns = 0;
     S.vel.copy(fh).multiplyScalar(ns);
     const liftUp = acc.y; if (liftUp > 0.3) { S.onGround = false; S.vel.y = liftUp * dt; }
     S.pos.addScaledVector(S.vel, dt);
@@ -162,7 +191,7 @@ function physics(dt) {
   if (S.pos.y > 30000) S.vel.y = Math.min(S.vel.y, 0);
   // bâtiments (bbox grossière de la ville)
 }
-let dmg = 0, grass = false;
+let dmg = 0, grass = false, rotHint = false;
 
 function touchdown(gh, clear) {
   _e.setFromQuaternion(S.quat, 'YXZ');
@@ -269,7 +298,8 @@ function updateCamera(dt) {
   if (camMode === 0 || camMode === 4) {
     const back = _f.clone().multiplyScalar(-1); if (camMode === 4) back.set(Math.sin(orbit.yaw), 0, Math.cos(orbit.yaw));
     back.applyAxisAngle(new THREE.Vector3(0, 1, 0), camMode === 0 ? orbit.yaw : 0);
-    const upBlend = _u.clone().lerp(new THREE.Vector3(0, 1, 0), 0.7).normalize();
+    const upBlend = settings.assist ? new THREE.Vector3(0, 1, 0) : _u.clone().lerp(new THREE.Vector3(0, 1, 0), 0.7).normalize();
+    if (camMode === 0 && _f.y > 0.85) back.set(-S.vel.x, 0, -S.vel.z).normalize().lerp(back, 0.3).normalize();
     camPos.copy(target).addScaledVector(back, d * Math.cos(orbit.pitch)).addScaledVector(upBlend, d * (0.22 + Math.sin(orbit.pitch)));
     const gh = world.height(camPos.x, camPos.z) + 2; if (camPos.y < gh) camPos.y = gh;
     if (camera.position.distanceTo(camPos) > d * 6) camera.position.copy(camPos); else camera.position.lerp(camPos, 1 - Math.exp(-dt * 7));
@@ -283,7 +313,7 @@ function updateCamera(dt) {
     if (cineAnchor.distanceTo(S.pos) > 900 || cineAnchor.y < -1e8) { cineAnchor.copy(S.pos).addScaledVector(S.vel.lengthSq() > 1 ? S.vel.clone().normalize() : _f, 500).add(new THREE.Vector3((Math.random() - 0.5) * 120, 0, (Math.random() - 0.5) * 120)); cineAnchor.y = Math.max(world.height(cineAnchor.x, cineAnchor.z) + 4, S.pos.y + (Math.random() - 0.3) * 40); }
     camera.position.copy(cineAnchor); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(2400 / cineAnchor.distanceTo(S.pos), 8, 60);
   } else {
-    camera.position.set(540, AIRPORT_H + 48, 520); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(3000 / camera.position.distanceTo(S.pos), 3, 60);
+    const tw = world.towers.reduce((b, t) => (t.distanceTo(S.pos) < b.distanceTo(S.pos) ? t : b)); camera.position.copy(tw); camera.up.set(0, 1, 0); camera.lookAt(S.pos); camera.fov = THREE.MathUtils.clamp(THREE.MathUtils.radToDeg(2 * Math.atan((spec.len * 2.2) / camera.position.distanceTo(S.pos))), 2, 50); plane.visible = true;
   }
   camera.updateProjectionMatrix();
 }
@@ -486,7 +516,7 @@ $('#loadInfo').textContent = 'Génération du monde…';
 setTimeout(() => {
   const t0 = performance.now();
   world = new World(renderer, scene, quality); world.setTime(params.get('tod') || 'day'); applyQuality();
-  $('#loadInfo').textContent = `Monde prêt (${((performance.now() - t0) / 1000).toFixed(1)} s) · 30 × 30 km`;
-  window.__sim = { particles, camera, get plane() { return plane; }, S, cfg, spawn, get world() { return world; }, cycleCam, start: () => $('#go').click() };
+  $('#loadInfo').textContent = `Monde prêt (${((performance.now() - t0) / 1000).toFixed(1)} s) · 60 × 60 km · 3 aéroports · 5 villes`;
+  window.__sim = { simulate: (sec, inp = {}) => { const dt = 1 / 120; for (let i = 0; i < sec * 120; i++) { Object.assign(S, inp); physics(dt); } }, particles, camera, get plane() { return plane; }, S, cfg, spawn, get world() { return world; }, cycleCam, start: () => $('#go').click() };
   loop();
 }, 30);

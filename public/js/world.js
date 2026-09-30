@@ -16,27 +16,48 @@ function ridged(x, y) { let s = 0, a = 0.5, f = 1; for (let i = 0; i < 5; i++) {
 const smooth = (e0, e1, x) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 // ------------------------------------------------------------------ constantes monde
-export const SIZE = 30000, SEG = 512, AIRPORT_H = 14;
+export const SIZE = 60000, SEG = 640, AIRPORT_H = 14;
 export const RWY = { x: 0, z: 0, len: 3200, wid: 50 }; // piste 36/18 orientée Nord (-Z)
-const CITY = { x: 2600, z: -600, r: 1200 };
+export const AIRPORTS = [
+  { x: 0, z: 0, h: AIRPORT_H, name: 'AeroFlux International' },
+  { x: -17000, z: 12000, h: 38, name: 'Nord-Ouest Regional' },
+  { x: 15000, z: -13000, h: 26, name: 'Cap Sud-Est' },
+];
+export const CITIES = [
+  { x: 2600, z: -600, r: 1200, name: 'Port-Flux' }, { x: -13500, z: 8000, r: 1000, name: 'Valmont' },
+  { x: 11000, z: -9000, r: 900, name: 'Sable-Rouge' }, { x: 7000, z: 12500, r: 650, name: 'Bourg-Vert' }, { x: -9000, z: -12000, r: 600, name: 'Rocheval' },
+];
+const CITY = CITIES[0];
 
 function rawHeight(x, z) {
-  const d = Math.hypot(x * 0.8, z) / 12500;
-  const island = 1 - smooth(0.55, 1.05, d);
-  let h = fbm(x / 3200 + 11, z / 3200 + 7) * 260 - 60;
-  h += ridged(x / 5200 + 3, z / 5200 + 9) * 1500 * smooth(0.25, 0.8, fbm(x / 9000 + 1, z / 9000 + 4, 3)) ;
+  const d = Math.hypot(x * 0.8, z) / 25500;
+  const island = 1 - smooth(0.55, 1.02, d);
+  let h = fbm(x / 4200 + 11, z / 4200 + 7) * 300 - 60;
+  h += ridged(x / 7000 + 3, z / 7000 + 9) * 1700 * smooth(0.3, 0.8, fbm(x / 14000 + 1, z / 14000 + 4, 3));
+  h += (fbm(x / 600, z / 600, 3) - 0.5) * 30; // micro relief
   h = h * island - 90 * (1 - island);
-  // zone aéroport plate
-  const ax = Math.abs(x - 150) - 520, az = Math.abs(z) - 2100;
-  const ad = Math.max(ax, az, 0) + Math.min(Math.max(ax, az), 0);
-  const af = smooth(0, 900, ad);
-  h = AIRPORT_H * (1 - af) + Math.max(h, af > 0.99 ? h : 6) * af;
-  // ville : plateau doux
-  const cd = Math.hypot(x - CITY.x, z - CITY.z) / CITY.r;
-  const cf = smooth(0.7, 1.4, cd);
-  h = (22 + fbm(x / 800, z / 800, 2) * 10) * (1 - cf) + h * cf;
+  // lac intérieur
+  const ld = Math.hypot(x + 4000, z - 3000) / 1800; h = h * smooth(0.6, 1.2, ld) + (-8) * (1 - smooth(0.6, 1.2, ld));
+  for (const a of AIRPORTS) {
+    const ax = Math.abs(x - a.x - 150) - 520, az = Math.abs(z - a.z) - 2100;
+    const ad = Math.max(ax, az, 0) + Math.min(Math.max(ax, az), 0);
+    const af = smooth(0, 1100, ad);
+    h = a.h * (1 - af) + Math.max(h, af > 0.99 ? h : 6) * af;
+    // couloirs d'approche dégagés (pente 2°) aux deux extrémités de la piste
+    const dzA = Math.abs(z - a.z) - 1600;
+    if (dzA > 0 && dzA < 14000) {
+      const lat = smooth(700 + dzA * 0.12, 1500 + dzA * 0.2, Math.abs(x - a.x));
+      const cap = a.h - 3 + dzA * 0.014;
+      if (h > cap) h = cap + (h - cap) * lat;
+    }
+  }
+  for (const c of CITIES) {
+    const cd = Math.hypot(x - c.x, z - c.z) / c.r, cf = smooth(0.7, 1.5, cd);
+    h = (Math.max(18, Math.min(h, 60)) + fbm(x / 800, z / 800, 2) * 10) * (1 - cf) + h * cf;
+  }
   return h;
 }
+const cityF = (x, z) => { let v = 0; for (const c of CITIES) v = Math.max(v, 1 - smooth(0.6, 1.0, Math.hypot(x - c.x, z - c.z) / c.r)); return v; };
 
 // ------------------------------------------------------------------ textures procédurales
 function canvasTex(w, h, draw, repeat = 1) {
@@ -67,7 +88,7 @@ export class World {
     this.renderer = renderer; this.scene = scene; this.q = quality;
     this.heights = new Float32Array((SEG + 1) * (SEG + 1));
     this.nightMats = []; this.lights = [];
-    this.buildSky(); this.buildTerrain(); this.buildWater(); this.buildAirport(); this.buildCity(); this.buildTrees(); this.buildClouds();
+    this.buildSky(); this.buildTerrain(); this.buildWater(); this.towers = []; AIRPORTS.forEach((a, i) => this.buildAirport(a, i)); this.buildCity(); this.buildRoads(); this.buildTurbines(); this.buildBoats(); this.buildTrees(); this.buildClouds();
     this.mapCanvas = this.makeMap();
   }
   // hauteur exacte du maillage (interpolation bilinéaire)
@@ -78,8 +99,8 @@ export class World {
     const a = H[iz * n + ix], b = H[iz * n + ix + 1], c = H[(iz + 1) * n + ix], d = H[(iz + 1) * n + ix + 1];
     return fx + fz <= 1 ? a + (b - a) * fx + (c - a) * fz : d + (c - d) * (1 - fx) + (b - d) * (1 - fz);
   }
-  onRunway(x, z) { return Math.abs(x - RWY.x) < RWY.wid / 2 + 8 && Math.abs(z - RWY.z) < RWY.len / 2 + 60; }
-  onPaved(x, z) { return this.onRunway(x, z) || (x > 120 && x < 520 && Math.abs(z) < 1650); }
+  onRunway(x, z) { return AIRPORTS.some((a) => Math.abs(x - a.x) < RWY.wid / 2 + 8 && Math.abs(z - a.z) < RWY.len / 2 + 60); }
+  onPaved(x, z) { return this.onRunway(x, z) || AIRPORTS.some((a) => x - a.x > 80 && x - a.x < 520 && Math.abs(z - a.z) < 1650); }
 
   buildSky() {
     const sky = new Sky(); sky.scale.setScalar(100000); this.scene.add(sky); this.sky = sky;
@@ -89,7 +110,7 @@ export class World {
     this.sun.shadow.bias = -0.0004; this.sun.shadow.normalBias = 0.6;
     this.scene.add(this.sun, this.sun.target);
     this.hemi = new THREE.HemisphereLight(0xbfdcff, 0x3a4a2a, 0.8); this.scene.add(this.hemi);
-    this.scene.fog = new THREE.FogExp2(0xbfd6ee, 0.000055);
+    this.scene.fog = new THREE.FogExp2(0xbfd6ee, 0.000032);
     this.pmrem = new THREE.PMREMGenerator(this.renderer);
     // étoiles
     const sp = []; for (let i = 0; i < 3000; i++) { const v = new THREE.Vector3().randomDirection(); if (v.y < 0.02) v.y = Math.abs(v.y) + 0.02; sp.push(v.x * 60000, v.y * 60000, v.z * 60000); }
@@ -140,7 +161,7 @@ export class World {
       c.lerp(rock.clone().lerp(rock2, m2), smooth(0.18, 0.4, slope) * smooth(30, 120, h));
       c.lerp(rock, smooth(500, 800, h) * 0.8);
       c.lerp(snow, smooth(950, 1150, h + m * 120) * (1 - smooth(0.35, 0.6, slope)));
-      const cd = Math.hypot(x - CITY.x, z - CITY.z) / CITY.r; c.lerp(urban, (1 - smooth(0.6, 1.0, cd)) * 0.8);
+      c.lerp(urban, cityF(x, z) * 0.8);
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
@@ -172,8 +193,8 @@ export class World {
     water.rotation.x = -Math.PI / 2; water.position.y = 0.5; water.material.uniforms.size.value = 6; this.scene.add(water); this.water = water;
   }
 
-  buildAirport() {
-    const g = new THREE.Group(); this.scene.add(g); const y = AIRPORT_H + 0.08;
+  buildAirport(ap, idx) {
+    const g = new THREE.Group(); g.position.set(ap.x, 0, ap.z); this.scene.add(g); const y = ap.h + 0.08;
     // --- texture piste détaillée
     const rtex = canvasTex(256, 4096, (c, w, h) => {
       noiseFill(c, w, h, [58, 60, 64], 26, 0.6);
@@ -220,7 +241,7 @@ export class World {
     const term = new THREE.Mesh(new THREE.BoxGeometry(40, 12, 160), new THREE.MeshStandardMaterial({ color: 0xe6e8ea, roughness: 0.3, metalness: 0.2 })); term.position.set(20, 6, 0); tower.add(term);
     const glass = new THREE.Mesh(new THREE.BoxGeometry(40.4, 6, 158), new THREE.MeshStandardMaterial({ color: 0x163348, roughness: 0.05, metalness: 1, emissive: 0xffd89a, emissiveIntensity: 0 })); glass.position.set(20, 7, 0); glass.material.userData.base = 0.9; this.nightMats.push(glass.material); tower.add(glass);
     tower.traverse((m) => { if (m.isMesh) { m.castShadow = m.receiveShadow = true; } });
-    tower.position.set(540, y, 520); g.add(tower);
+    tower.position.set(540, y, 520); g.add(tower); this.towers.push(new THREE.Vector3(ap.x + 540, y + 58, ap.z + 520));
     // balisage : feux de bord, d'axe, rampe d'approche, PAPI
     const lightGeo = new THREE.SphereGeometry(0.45, 8, 6); const pts = []; const cols = [];
     const addL = (x, z, c) => { pts.push([x, z]); cols.push(new THREE.Color(c)); };
@@ -230,16 +251,15 @@ export class World {
     for (let z = -1500; z <= 1500; z += 30) addL(147, z, 0x3399ff);
     const lm = new THREE.InstancedMesh(lightGeo, new THREE.MeshBasicMaterial({ toneMapped: false }), pts.length);
     const M = new THREE.Matrix4(); pts.forEach(([x, z], i) => { M.makeTranslation(x, y + 0.4, z); lm.setMatrixAt(i, M); lm.setColorAt(i, cols[i].multiplyScalar(3)); });
-    g.add(lm); this.runwayLights = lm;
+    g.add(lm);
     // PAPI (4 feux à gauche du point d'aiming)
-    this.papi = []; for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })); m.position.set(-RWY.wid / 2 - 14 - i * 9, y + 0.7, RWY.len / 2 - 320); g.add(m); this.papi.push(m); }
+    if (idx === 0) this.papi = []; if (idx === 0) for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })); m.position.set(-RWY.wid / 2 - 14 - i * 9, y + 0.7, RWY.len / 2 - 320); g.add(m); this.papi.push(m); }
     // manche à air
     const sock = new THREE.Mesh(new THREE.ConeGeometry(1.2, 6, 12, 1, true), new THREE.MeshStandardMaterial({ color: 0xff6a00, side: THREE.DoubleSide })); sock.rotation.z = Math.PI / 2; sock.position.set(-60, y + 8, 1300); g.add(sock);
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 8), concrete); mast.position.set(-57, y + 4, 1300); g.add(mast);
     // véhicules / conteneurs sur le tarmac
     const vGeo = new THREE.BoxGeometry(3, 2.4, 6); const vcol = [0xffcc00, 0xffffff, 0xd03030, 0x2a6fdb];
     for (let i = 0; i < 26; i++) { const v = new THREE.Mesh(vGeo, new THREE.MeshStandardMaterial({ color: vcol[i % 4], roughness: 0.5, metalness: 0.3 })); v.position.set(420 + Math.random() * 60, y + 1.2, -450 + Math.random() * 900); v.rotation.y = Math.random() * 3; v.castShadow = true; g.add(v); }
-    this.airport = g;
   }
   updatePapi(px, py, pz) {
     // pente 3° vers le point d'aiming (z = len/2-320)
@@ -262,11 +282,11 @@ export class World {
     const uv = geo.attributes.uv; // UV repère pour la répétition
     const mats = [facade, facade, roof, roof, facade, facade];
     const items = []; const step = 70;
-    for (let x = CITY.x - CITY.r; x < CITY.x + CITY.r; x += step) for (let z = CITY.z - CITY.r; z < CITY.z + CITY.r; z += step) {
-      const d = Math.hypot(x - CITY.x, z - CITY.z) / CITY.r; if (d > 0.95 || Math.random() < 0.12) continue;
+    for (const CITY of CITIES) for (let x = CITY.x - CITY.r; x < CITY.x + CITY.r; x += step) for (let z = CITY.z - CITY.r; z < CITY.z + CITY.r; z += step) {
+      const d = Math.hypot(x - CITY.x, z - CITY.z) / CITY.r; if (d > 0.95 || Math.random() < 0.12) continue; const big = CITY.r / 1200;
       for (let k = 0; k < 2; k++) {
         const w = 18 + Math.random() * 22, dd = 18 + Math.random() * 22;
-        const hgt = (8 + Math.random() * 25) * (1 + (1 - d) ** 3 * 9 * Math.random());
+        const hgt = (8 + Math.random() * 25) * (1 + (1 - d) ** 3 * 9 * big * Math.random());
         const bx = x + (k ? 26 : -8) + Math.random() * 6, bz = z + (Math.random() - 0.5) * 14;
         items.push([bx, this.height(bx, bz) - 1, bz, w, hgt, dd]);
       }
@@ -283,11 +303,11 @@ export class World {
     };
     im.castShadow = true; im.receiveShadow = true; this.scene.add(im); this.city = im;
     // lampadaires / halo urbain
-    const glow = new THREE.PointLight(0xffc27a, 0, 4000, 1.5); glow.position.set(CITY.x, 300, CITY.z); this.scene.add(glow); this.lights.push(glow); glow.intensity = 6e5;
+    for (const C of CITIES) { const glow = new THREE.PointLight(0xffc27a, 6e5 * C.r / 1200, 4000, 1.5); glow.position.set(C.x, 300, C.z); this.scene.add(glow); this.lights.push(glow); }
   }
 
   buildTrees() {
-    const count = this.q === 'perf' ? 5000 : 14000;
+    const count = this.q === 'perf' ? 9000 : 26000;
     const cone = new THREE.ConeGeometry(3.2, 9, 7); cone.translate(0, 8.5, 0);
     const cone2 = new THREE.ConeGeometry(2.4, 6, 7); cone2.translate(0, 12.5, 0);
     const trunk = new THREE.CylinderGeometry(0.35, 0.5, 5, 5); trunk.translate(0, 2.5, 0);
@@ -298,9 +318,9 @@ export class World {
     const pines = new THREE.InstancedMesh(pine, leafMat, count), broad = new THREE.InstancedMesh(leaf, leafMat, count), trunks = new THREE.InstancedMesh(trunk, new THREE.MeshStandardMaterial({ color: 0x4a3526, roughness: 1 }), count * 2);
     const M = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), c = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
     let np = 0, nb = 0, nt = 0, tries = 0;
-    while ((np < count || nb < count) && tries++ < count * 12) {
+    while ((np < count || nb < count) && tries++ < count * 14) {
       const x = (Math.random() - 0.5) * SIZE * 0.8, z = (Math.random() - 0.5) * SIZE * 0.8, h = this.height(x, z);
-      if (h < 6 || h > 900 || this.onPaved(x, z) || (Math.abs(x - 150) < 700 && Math.abs(z) < 2300) || Math.hypot(x - CITY.x, z - CITY.z) < CITY.r * 0.9) continue;
+      if (h < 6 || h > 900 || this.onPaved(x, z) || AIRPORTS.some((a) => Math.abs(x - a.x - 150) < 800 && Math.abs(z - a.z) < 2400) || cityF(x, z) > 0.05 || this.nearRoad(x, z)) continue;
       if (fbm(x / 900 + 50, z / 900, 3) < 0.48) continue;
       const slope = Math.abs(this.height(x + 8, z) - h) + Math.abs(this.height(x, z + 8) - h); if (slope > 7) continue;
       const sc = 0.7 + Math.random() * 0.9; q.setFromAxisAngle(up, Math.random() * 6.28); s.set(sc, sc * (0.8 + Math.random() * 0.5), sc); p.set(x, h - 0.3, z); M.compose(p, q, s);
@@ -329,22 +349,88 @@ export class World {
     this.scene.add(grp); this.clouds = grp;
   }
 
+
+  // ------------------------------------------------ routes (rubans qui épousent le relief)
+  nearRoad(x, z) { if (!this.roadPts) return false; for (const p of this.roadPts) if (Math.abs(p.x - x) < 30 && Math.abs(p.z - z) < 30) return true; return false; }
+  buildRoads() {
+    const nodes = [...AIRPORTS.map((a) => new THREE.Vector3(a.x + 450, 0, a.z)), ...CITIES.map((c) => new THREE.Vector3(c.x, 0, c.z))];
+    const links = [[0, 3], [3, 6], [0, 7], [1, 4], [4, 7], [2, 5], [5, 3], [7, 4], [0, 5]];
+    const tex = canvasTex(64, 256, (c, w, h) => { noiseFill(c, w, h, [66, 66, 68], 20); c.fillStyle = '#ddd'; c.fillRect(3, 0, 2, h); c.fillRect(w - 5, 0, 2, h); c.fillStyle = '#e8c33a'; for (let y = 0; y < h; y += 64) c.fillRect(w / 2 - 1, y, 2, 36); });
+    tex.repeat.set(1, 1);
+    const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2 });
+    this.roads = []; this.roadPts = [];
+    for (const [a, b] of links) {
+      const A = nodes[a], B = nodes[b]; const n = Math.ceil(A.distanceTo(B) / 60); const pts = [];
+      const perp = new THREE.Vector3(-(B.z - A.z), 0, B.x - A.x).normalize();
+      for (let i = 0; i <= n; i++) { const t = i / n; const p = A.clone().lerp(B, t).addScaledVector(perp, Math.sin(t * Math.PI * 2) * 500 * Math.sin(t * Math.PI)); pts.push(p); }
+      if (pts.some((p) => this.height(p.x, p.z) < 2)) continue; // pas de route dans l'eau
+      this.roads.push(pts); this.roadPts.push(...pts);
+      const pos = [], uv = [], idx = []; let v = 0;
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[Math.min(i + 1, pts.length - 1)], o = pts[Math.max(i - 1, 0)];
+        const dir = q.clone().sub(o).normalize(), side = new THREE.Vector3(-dir.z, 0, dir.x).multiplyScalar(6);
+        for (const s of [-1, 1]) { const x = p.x + side.x * s, z = p.z + side.z * s; pos.push(x, this.height(x, z) + 0.6, z); uv.push(s < 0 ? 0 : 1, v); }
+        v += 60 / 40;
+        if (i < pts.length - 1) { const k = i * 2; idx.push(k, k + 2, k + 1, k + 1, k + 2, k + 3); }
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
+      const m = new THREE.Mesh(g, mat); m.receiveShadow = true; this.scene.add(m);
+    }
+  }
+  // ------------------------------------------------ éoliennes
+  buildTurbines() {
+    const white = new THREE.MeshStandardMaterial({ color: 0xf2f4f6, roughness: 0.4, metalness: 0.2 });
+    const red = new THREE.MeshBasicMaterial({ color: 0xff2020, toneMapped: false });
+    this.rotors = [];
+    const farms = [[-6000, 15000], [18000, 4000], [-19000, -4000]];
+    for (const [fx, fz] of farms) for (let i = 0; i < 9; i++) {
+      const x = fx + (i % 3) * 320 + Math.random() * 60, z = fz + Math.floor(i / 3) * 360 + Math.random() * 60, h = this.height(x, z); if (h < 5) continue;
+      const t = new THREE.Group(); t.position.set(x, h, z);
+      const mast = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 2.6, 80, 16), white); mast.position.y = 40; t.add(mast);
+      const nac = new THREE.Mesh(new THREE.BoxGeometry(3.4, 3.4, 9), white); nac.position.set(0, 81, 1); t.add(nac);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.6), red); lamp.position.set(0, 83.2, 3); t.add(lamp);
+      const rotor = new THREE.Group(); rotor.position.set(0, 81, -3.8); t.add(rotor);
+      rotor.add(new THREE.Mesh(new THREE.SphereGeometry(1.8, 16, 12), white));
+      for (let k = 0; k < 3; k++) { const b = new THREE.Mesh(new THREE.BoxGeometry(2.2, 42, 0.5).translate(0, 22, 0), white); b.rotation.z = (k * Math.PI * 2) / 3; rotor.add(b); }
+      rotor.rotation.z = Math.random() * 6; this.rotors.push(rotor);
+      t.rotation.y = 0.6; t.traverse((m) => { if (m.isMesh) { m.castShadow = true; } }); this.scene.add(t);
+    }
+  }
+  // ------------------------------------------------ bateaux
+  buildBoats() {
+    this.boats = [];
+    const hullM = new THREE.MeshStandardMaterial({ color: 0x23324a, roughness: 0.5 }), deckM = new THREE.MeshStandardMaterial({ color: 0xe8e8e0, roughness: 0.6 }), boxM = [0xc0392b, 0x2e86de, 0xf39c12, 0x27ae60].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7 }));
+    for (let i = 0; i < 14; i++) {
+      const big = i < 5, L = big ? 140 : 25 + Math.random() * 20, b = new THREE.Group();
+      const hull = new THREE.Mesh(new THREE.BoxGeometry(L * 0.16, L * 0.1, L), hullM); b.add(hull);
+      const bow = new THREE.Mesh(new THREE.ConeGeometry(L * 0.08, L * 0.18, 4).rotateX(-Math.PI / 2).rotateZ(Math.PI / 4), hullM); bow.scale.set(1, 0.6, 1); bow.position.z = -L * 0.59; b.add(bow);
+      const br = new THREE.Mesh(new THREE.BoxGeometry(L * 0.14, L * 0.12, L * 0.12), deckM); br.position.set(0, L * 0.1, L * 0.38); b.add(br);
+      if (big) for (let k = 0; k < 14; k++) { const c = new THREE.Mesh(new THREE.BoxGeometry(L * 0.13, 6, 12), boxM[k % 4]); c.position.set(0, L * 0.05 + 3 + (k % 2) * 6, -L * 0.35 + Math.floor(k / 2) * 13); b.add(c); }
+      b.traverse((m) => { if (m.isMesh) m.castShadow = true; });
+      const ang = Math.random() * 6.28, R = 25500 + Math.random() * 3500;
+      b.userData = { cx: 0, cz: 0, r: R, a: ang, s: (Math.random() < 0.5 ? 1 : -1) * (big ? 0.000012 : 0.00003) };
+      this.scene.add(b); this.boats.push(b);
+    }
+  }
   makeMap() {
-    const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'); const img = g.createImageData(N, N);
+    const N = 384, c = document.createElement('canvas'); c.width = c.height = N; const g = c.getContext('2d'); const img = g.createImageData(N, N);
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const x = (i / N - 0.5) * SIZE, z = (j / N - 0.5) * SIZE, h = this.height(x, z), k = (j * N + i) * 4;
       let r, gg, b;
       if (h < 1) { r = 14; gg = 60; b = 90; } else if (h > 900) { r = 220; gg = 225; b = 230; } else if (h > 400) { r = 120; gg = 115; b = 100; } else { const t = h / 400; r = 50 + t * 70; gg = 100 + t * 20; b = 40 + t * 40; }
-      if (Math.hypot(x - CITY.x, z - CITY.z) < CITY.r * 0.9) { r = gg = b = 120; }
+      if (cityF(x, z) > 0.3) { r = gg = b = 125; }
       img.data[k] = r; img.data[k + 1] = gg; img.data[k + 2] = b; img.data[k + 3] = 255;
     }
     g.putImageData(img, 0, 0);
-    const s = N / SIZE; g.fillStyle = '#ddd'; g.fillRect(N / 2 - 2, N / 2 - (RWY.len / 2) * s, 4, RWY.len * s);
+    const s = N / SIZE; g.fillStyle = '#eee'; for (const a of AIRPORTS) g.fillRect(N / 2 + a.x * s - 1.5, N / 2 + (a.z - RWY.len / 2) * s, 3, RWY.len * s);
+    g.strokeStyle = 'rgba(230,200,120,.8)'; g.lineWidth = 1; for (const r of this.roads || []) { g.beginPath(); r.forEach((p, i) => (i ? g.lineTo(N / 2 + p.x * s, N / 2 + p.z * s) : g.moveTo(N / 2 + p.x * s, N / 2 + p.z * s))); g.stroke(); }
+    g.fillStyle = '#fff'; g.font = 'bold 8px system-ui'; for (const c of CITIES) g.fillText(c.name, N / 2 + c.x * s - 14, N / 2 + c.z * s - c.r * s - 2);
     return c;
   }
   update(t, focus) {
     if (this.water) this.water.material.uniforms.time.value = t * 0.6;
     this.sun.position.copy(focus).addScaledVector(this.sunDir, 1500); this.sun.target.position.copy(focus);
-    this.runwayLights.visible = this.night > 0.2 || true;
+    if (this.rotors) for (const r of this.rotors) r.rotation.z += 0.02;
+    if (this.boats) for (const b of this.boats) { b.userData.a += b.userData.s; b.position.set(b.userData.cx + Math.cos(b.userData.a) * b.userData.r, 0.6 + Math.sin(t * 1.3 + b.userData.a * 9) * 0.25, b.userData.cz + Math.sin(b.userData.a) * b.userData.r); b.rotation.y = -b.userData.a + (b.userData.s > 0 ? Math.PI : 0); b.rotation.z = Math.sin(t + b.userData.a * 5) * 0.03; }
   }
 }

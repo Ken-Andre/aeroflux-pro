@@ -1,4 +1,4 @@
-:root{--c1:#38bdf8;--c2:#34d399;--c3:#a78bfa;--c4:#fbbf24;--c5:#f472b6;--txt:#e6f0ff;--mut:#8ea3c0}
+:root{--c1:#38bdf8;--c2:#34d399;--c3:#a78bfa;--c4:#fbbf24;--c5:#f472b6;--txt:#e6f0ff;--mut:#b4c4db}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#05080f;color:var(--txt);font:13px/1.35 "Segoe UI",Inter,system-ui,sans-serif;user-select:none}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
@@ -7,8 +7,10 @@ canvas#hud{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
 .hidden{display:none!important}
 
 /* ---------- LIQUID GLASS ---------- */
-.glass{position:relative;background:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,.04) 45%,rgba(120,170,255,.06));
-  backdrop-filter:blur(22px) saturate(170%);-webkit-backdrop-filter:blur(22px) saturate(170%);
+.glass{position:relative;color:#f4f8ff;text-shadow:0 1px 2px rgba(0,0,0,.55);
+  background:linear-gradient(135deg,rgba(255,255,255,.12),rgba(255,255,255,.03) 45%,rgba(120,170,255,.05)),rgba(8,14,28,.38);
+  /* brightness() assombrit automatiquement les fonds clairs (ciel, piste) -> contraste adaptatif */
+  backdrop-filter:blur(22px) saturate(150%) brightness(.62);-webkit-backdrop-filter:blur(22px) saturate(150%) brightness(.62);
   border:1px solid rgba(255,255,255,.18);border-radius:18px;
   box-shadow:0 10px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.35),inset 0 -1px 0 rgba(255,255,255,.05)}
 .glass::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
@@ -17,8 +19,8 @@ canvas#hud{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
 #top{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;align-items:center;padding:7px 10px;z-index:20;flex-wrap:wrap;border-radius:16px}
 .brand{display:flex;gap:9px;align-items:center;margin-right:auto;color:var(--c1)}
 .brand b{display:block;letter-spacing:.2em;font-size:12px;color:#fff}.brand small{color:var(--c2);font-size:11px}
-.seg{display:flex;gap:2px;align-items:center;background:rgba(0,0,0,.25);border-radius:11px;padding:3px;border:1px solid rgba(255,255,255,.08)}
-.seg button{padding:5px 10px;border-radius:8px;font-size:12px;color:#cfe0f7;transition:.2s}
+.seg{display:flex;gap:2px;align-items:center;background:rgba(0,0,0,.32);border-radius:11px;padding:3px;border:1px solid rgba(255,255,255,.08)}
+.seg button{padding:5px 10px;border-radius:8px;font-size:12px;color:#eef4ff;font-weight:500;transition:.2s}
 .seg button:hover{background:rgba(255,255,255,.1)}
 .seg button.on{background:linear-gradient(135deg,#38bdf8,#6366f1);color:#fff;box-shadow:0 0 18px rgba(56,189,248,.5)}
 #vol{width:70px;accent-color:#38bdf8;margin:0 6px}
@@ -26,7 +28,7 @@ canvas#hud{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
 /* HUD cards */
 #hudCards{position:fixed;right:14px;bottom:14px;z-index:5}
 .card{padding:12px 14px;min-width:170px}
-.row{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;color:var(--mut);margin:3px 0}
+.row{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em;color:#d6e2f3;font-weight:600;margin:3px 0}
 .row b{margin-left:auto;color:#fff}.row.sm{margin-top:4px}
 .led{width:9px;height:9px;border-radius:50%;background:#475569;box-shadow:0 0 0 2px rgba(0,0,0,.3)}
 .led.g{background:#22c55e;box-shadow:0 0 10px #22c55e}.led.a{background:#f59e0b;box-shadow:0 0 10px #f59e0b}.led.r{background:#ef4444;box-shadow:0 0 10px #ef4444}
@@ -45,7 +47,7 @@ canvas#hud{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
 body.cine #letterbox i{height:12vh}
 body.cine #top,body.cine #hudCards,body.cine #phase,body.cine #help{opacity:0;pointer-events:none}
 body.cine #top:hover{opacity:1;pointer-events:auto}
-#help{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);padding:8px 14px;font-size:11.5px;color:#cbd5e1;z-index:6;max-width:780px;border-radius:12px}
+#help{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);padding:8px 14px;font-size:12px;color:#f1f5f9;z-index:6;max-width:780px;border-radius:12px}
 #help button{margin-left:8px;padding:2px 10px;border-radius:6px;background:rgba(56,189,248,.3)}
 
 /* Widgets */
@@ -107,3 +109,5 @@ td{padding:5px;border-top:1px solid rgba(255,255,255,.06)}
 body.immersive #top,body.immersive #hudCards,body.immersive #help,body.immersive #phase,body.immersive #widgets{opacity:0;pointer-events:none;transition:opacity .4s}
 body.immersive #top:hover{opacity:1;pointer-events:auto}
 body.immersive #minimap{transform:scale(.8);transform-origin:bottom left}
+
+#help kbd{display:inline-block;min-width:18px;padding:0 5px;margin:0 1px;border-radius:5px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.25);font:600 11px ui-monospace,Consolas,monospace;text-align:center}
