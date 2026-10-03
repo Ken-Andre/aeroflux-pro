@@ -54,3 +54,11 @@ Anneaux, livraison, tour de piste, rase-vagues — objectif signalé sur le HUD 
 ### Corrections
 - Protection basse vitesse : impossible de cabrer près du décrochage.
 - Vue tour : retour automatique en poursuite si la tour est à plus de 9 km.
+
+## v2.4 — Aéroport international complet
+- Piste 18/36 de 3 800 × 60 m avec accotements, feux d'axe, de bord, de seuil et rampes d'approche aux deux extrémités.
+- Taxiway parallèle balisé (bleu/vert), 5 bretelles (A–E) avec panneaux et marquages de point d'attente, bretelles rapides.
+- Tarmac béton de 3,5 km, terminal vitré au toit courbe, 4 jetées avec passerelles et avions de ligne stationnés (4 compagnies).
+- Tour de contrôle de 72 m, radar tournant, hangars de maintenance, terminal fret et conteneurs, dépôt carburant, parking voitures, route d'accès, clôture.
+- Les aéroports régionaux reçoivent une version plus compacte.
+- Correction : la piste n'est plus recouverte par le sol (herbe) près de l'avion.
