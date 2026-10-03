@@ -192,7 +192,7 @@ export class World {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix*vec4(transformed,1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
         .replace('#include <map_fragment>', `
-          vec4 d1 = texture2D(map, vWPos.xz/18.0);
+          vec2 pw = vWPos.xz; vec4 d1 = 0.5*(texture2D(map, mat2(0.8,-0.6,0.6,0.8)*pw/17.0) + texture2D(map, mat2(0.28,0.96,-0.96,0.28)*pw/9.0 + 0.37));
           vec4 d2 = texture2D(map, vWPos.xz/210.0);
           vec4 d3 = texture2D(map, vWPos.xz/1900.0);
           float dist = length(vWPos - cameraPosition);
@@ -338,12 +338,8 @@ export class World {
     const cars = new THREE.InstancedMesh(carG, new THREE.MeshStandardMaterial({ roughness: 0.3, metalness: 0.6 }), nC); let ci = 0;
     for (let i = 0; i < nC; i++) { if (Math.random() < 0.25) continue; const col = [TX + 72, TX + 98, TX + 142, TX + 168][i % 4]; M.makeTranslation(col, y, -pkL / 2 + 8 + Math.floor(i / 4) * 16 * 0.62); cars.setMatrixAt(ci, M); cars.setColorAt(ci++, new THREE.Color().setHSL(Math.random(), Math.random() * 0.6, 0.25 + Math.random() * 0.5)); }
     cars.count = ci; g.add(cars);
-    // --- clôture périmétrique
-    const postG = new THREE.BoxGeometry(0.2, 2.5, 0.2); postG.translate(0, 1.25, 0); const fence = []; const fx0 = -140, fx1 = TX + 200, fz = L / 2 + 250;
-    for (let z = -fz; z <= fz; z += 25) fence.push([fx0, z], [fx1, z]); for (let x = fx0; x <= fx1; x += 25) fence.push([x, -fz], [x, fz]);
-    const posts = new THREE.InstancedMesh(postG, darkMat, fence.length); fence.forEach(([x, z], i) => { M.makeTranslation(x, y - 0.3, z); posts.setMatrixAt(i, M); }); g.add(posts);
     // --- balisage
-    const lightGeo = new THREE.SphereGeometry(0.45, 8, 6); const pts = [], cols = [];
+    const lightGeo = new THREE.SphereGeometry(0.32, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2); lightGeo.scale(1, 0.45, 1); const pts = [], cols = [];
     const addL = (x, z, c) => { pts.push([x, z]); cols.push(new THREE.Color(c)); };
     for (let z = -L / 2; z <= L / 2; z += 60) { addL(-W / 2 - 2, z, 0xfff2cc); addL(W / 2 + 2, z, 0xfff2cc); }
     for (let z = -L / 2 + 30; z <= L / 2 - 30; z += 30) addL(0.8, z, Math.abs(z) > L / 2 - 900 ? 0xff5555 : 0xffffff);
@@ -352,7 +348,10 @@ export class World {
     for (let z = -L / 2 + 50; z <= L / 2 - 50; z += 30) { addL(173, z, 0x3399ff); addL(207, z, 0x3399ff); }
     for (const z of exits) for (let x = 30; x < 180; x += 15) addL(x, z, 0x33ff66);
     const lm = new THREE.InstancedMesh(lightGeo, new THREE.MeshBasicMaterial({ toneMapped: false }), pts.length);
-    pts.forEach(([x, z], i) => { M.makeTranslation(x, y + 0.35, z); lm.setMatrixAt(i, M); lm.setColorAt(i, cols[i].multiplyScalar(3)); }); g.add(lm);
+    pts.forEach(([x, z], i) => { const appr = Math.abs(z) > L / 2 + 30; M.makeTranslation(x, y + (appr ? 0.9 : 0.02), z); lm.setMatrixAt(i, M); lm.setColorAt(i, cols[i].multiplyScalar(2.2)); }); g.add(lm);
+    // mâts des rampes d'approche
+    const poleG = new THREE.CylinderGeometry(0.06, 0.06, 0.9); poleG.translate(0, 0.45, 0); const appPts = pts.filter(([, z]) => Math.abs(z) > L / 2 + 30);
+    const poles = new THREE.InstancedMesh(poleG, darkMat, appPts.length); appPts.forEach(([x, z], i) => { M.makeTranslation(x, y, z); poles.setMatrixAt(i, M); }); g.add(poles);
     // panneaux de taxiway
     const signTex = (txt) => canvasTex(128, 48, (c, w, h) => { c.fillStyle = '#111'; c.fillRect(0, 0, w, h); c.fillStyle = '#f5d000'; c.fillRect(64, 0, 64, h); c.font = 'bold 30px Arial'; c.textAlign = 'center'; c.fillStyle = '#f5d000'; c.fillText(txt, 32, 35); c.fillStyle = '#111'; c.fillText('18-36', 96, 35); });
     exits.forEach((z, i) => { const s = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.6, 4.4), [darkMat, darkMat, darkMat, darkMat, new THREE.MeshBasicMaterial({ map: signTex('ABCDE'[i]) }), new THREE.MeshBasicMaterial({ map: signTex('ABCDE'[i]) })]); s.rotation.y = Math.PI / 2; s.position.set(45, y + 1, z + 22); g.add(s); });
