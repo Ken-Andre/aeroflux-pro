@@ -62,3 +62,9 @@ Anneaux, livraison, tour de piste, rase-vagues — objectif signalé sur le HUD 
 - Tour de contrôle de 72 m, radar tournant, hangars de maintenance, terminal fret et conteneurs, dépôt carburant, parking voitures, route d'accès, clôture.
 - Les aéroports régionaux reçoivent une version plus compacte.
 - Correction : la piste n'est plus recouverte par le sol (herbe) près de l'avion.
+
+## v2.5 — Premier modèle 3D réaliste (glTF)
+- Nouveau système de chargement de modèles glTF/GLB (`public/models`, servis localement → jouable hors-ligne).
+- Le **Sparrow T2** utilise désormais un vrai modèle texturé (« Cesium Air », CesiumGS, CC BY 4.0) avec hélices animées. Repli automatique sur la maquette procédurale si le fichier manque.
+- Pour ajouter un modèle : déposer un `.glb` dans `public/models/` et l'enregistrer dans `MODELS` (`public/js/aircraft.js`) — orientation, échelle et hauteur du train sont calculées automatiquement.
+- Crédits : `public/models/CREDITS.md`.

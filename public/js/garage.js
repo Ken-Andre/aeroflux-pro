@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { buildAircraft, animateAircraft, SPECS, LIVERIES } from './aircraft.js';
+import { buildAircraft, animateAircraft, SPECS, LIVERIES, MODELS } from './aircraft.js';
 const $ = (s) => document.querySelector(s);
 
 const STATS = { // notes /10 pour la fiche
@@ -13,7 +13,7 @@ const STATS = { // notes /10 pour la fiche
 const DESC = {
   jet: 'Chasseur bimoteur à ailes delta, dérives canted, postcombustion. Extrêmement vif : idéal pour la voltige et les parcours d\'anneaux.',
   cargo: 'Long-courrier quadriréacteur. Lourd et très stable, pardonne les erreurs en approche. Longue piste nécessaire.',
-  prop: 'Monomoteur à aile haute. Lent, docile, décolle en quelques centaines de mètres : parfait pour apprendre.',
+  prop: 'Bimoteur à hélices et aile haute (modèle 3D réaliste texturé). Lent, docile, décolle en quelques centaines de mètres : parfait pour apprendre.',
 };
 
 export class Garage {
@@ -44,7 +44,7 @@ export class Garage {
   bindUI() {
     $('#gClose').onclick = () => this.hide();
     $('#gFly').onclick = () => { this.hide(); this.onFly(this.type); };
-    $('#gPlanes').innerHTML = Object.entries(SPECS).map(([k, s]) => `<button data-k="${k}"><b>${s.name}</b><small>${{ jet: 'Chasseur', cargo: 'Long-courrier', prop: 'Monomoteur' }[k]}</small></button>`).join('');
+    $('#gPlanes').innerHTML = Object.entries(SPECS).map(([k, s]) => `<button data-k="${k}"><b>${s.name}</b><small>${{ jet: 'Chasseur', cargo: 'Long-courrier', prop: 'Bimoteur' }[k]}</small></button>`).join('');
     $('#gPlanes').querySelectorAll('button').forEach((b) => (b.onclick = () => this.select(b.dataset.k)));
     const tog = (id, key, fn) => ($(id).onclick = () => { this.anim[key] = typeof this.anim[key] === 'number' ? (this.anim[key] ? 0 : 1) : !this.anim[key]; $(id).classList.toggle('on', !!this.anim[key]); fn && fn(); });
     tog('#gGear', 'gear'); tog('#gFlaps', 'flaps'); tog('#gSurf', 'surf'); tog('#gEngine', 'engine'); tog('#gRot', 'rotate', () => (this.controls.autoRotate = this.anim.rotate)); tog('#gWire', 'wire', () => this.applyWire());
@@ -67,7 +67,7 @@ export class Garage {
     this.R = R; this.applyWire(); this.focus('all', true);
     // UI
     $('#gPlanes').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.k === type));
-    $('#gName').textContent = sp.name; $('#gDesc').textContent = DESC[type];
+    $('#gName').textContent = sp.name; $('#gDesc').textContent = DESC[type] + (MODELS[type] ? ' — Modèle 3D : ' + MODELS[type].credit : '');
     $('#gStats').innerHTML = Object.entries(STATS[type]).map(([k, v]) => `<div class="gs"><span>${k}</span><i><em style="width:${v * 10}%"></em></i><b>${v}</b></div>`).join('')
       + `<div class="gspec"><div><small>Masse</small><b>${(sp.mass / 1000).toFixed(1)} t</b></div><div><small>Poussée</small><b>${(sp.thrust / 1000).toFixed(0)} kN</b></div><div><small>Surface alaire</small><b>${sp.S} m²</b></div><div><small>V rotation</small><b>${Math.round(sp.vr * 1.944)} kt</b></div><div><small>Décrochage</small><b>${Math.round(sp.stall * 1.944)} kt</b></div><div><small>Longueur</small><b>${sp.len} m</b></div></div>`;
     let meshes = 0, tris = 0; m.traverse((o) => { if (o.isMesh) { meshes++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / 3; } });

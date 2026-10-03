@@ -1,10 +1,47 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+// ---- modèles 3D réalistes (glTF) — chargés une fois, servis hors-ligne depuis /models
+export const MODELS = {
+  prop: { url: 'models/sparrow.glb', props: ['Prop', 'Prop__2_'], credit: '« Cesium Air » — CesiumGS (CC BY 4.0)' },
+};
+const _loader = new GLTFLoader(), _cache = {};
+export function loadModel(type) { const m = MODELS[type]; if (!m) return null; return (_cache[type] ||= _loader.loadAsync(m.url).catch((e) => { console.warn('modèle', type, e); return null; })); }
+export function preloadModels() { for (const k in MODELS) loadModel(k); }
+async function attachGLB(root, type, sp, liveryId) {
+  const gltf = await loadModel(type); if (!gltf || root.userData.disposed) return;
+  const cfg = MODELS[type];
+  const model = SkeletonUtils.clone(gltf.scene); model.updateMatrixWorld(true);
+  // livrée alternative (KHR_materials_variants : 2e matériau)
+  if (liveryId && liveryId !== 'default' && gltf.parser.json.materials.length > 1) {
+    const alt = await gltf.parser.getDependency('material', 1);
+    model.traverse((o) => { if (o.isMesh) o.material = alt; });
+  }
+  model.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; o.frustumCulled = false; if (o.material) o.material.envMapIntensity = 1.1; } });
+  const box = new THREE.Box3().setFromObject(model), c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+  // direction du nez : vers l'hélice si connue, sinon axe horizontal le plus long
+  const propNodes = (cfg.props || []).map((n) => model.getObjectByName(n)).filter(Boolean);
+  const pw = propNodes.length ? propNodes.reduce((s, n) => s.add(n.getWorldPosition(new THREE.Vector3())), new THREE.Vector3()).divideScalar(propNodes.length) : null;
+  let nose; if (pw) { const d = pw.clone().sub(c); d.y = 0; nose = Math.abs(d.x) > Math.abs(d.z) ? new THREE.Vector3(Math.sign(d.x), 0, 0) : new THREE.Vector3(0, 0, Math.sign(d.z)); } else nose = size.x > size.z ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, -1);
+  const len = Math.abs(nose.x) ? size.x : size.z, s = sp.len / len;
+  const wrap = new THREE.Group(); wrap.add(model);
+  wrap.quaternion.setFromUnitVectors(nose, new THREE.Vector3(0, 0, -1)); wrap.scale.setScalar(s);
+  model.position.sub(c); wrap.updateMatrixWorld(true);
+  const b2 = new THREE.Box3().setFromObject(wrap); wrap.position.y = -sp.gearH - b2.min.y;
+  // cacher la maquette procédurale (on garde feux et phares)
+  const keep = new Set();
+  for (const ch of root.children) if (!ch.isLight && !keep.has(ch) && !(ch.isObject3D && ch.type === 'Object3D')) ch.visible = false;
+  root.add(wrap); root.userData.glb = wrap;
+  root.userData.glbProps = propNodes.map((node) => { const q = node.getWorldQuaternion(new THREE.Quaternion()).invert(); return { node, axis: nose.clone().applyQuaternion(q).normalize() }; });
+  root.userData.credit = cfg.credit;
+}
 
 // Caractéristiques de vol + géométrie de chaque appareil (avant = -Z, haut = +Y, droite = +X)
 export const SPECS = {
   jet:   { name: 'Vortex X1',   mass: 11000, S: 38,  thrust: 100000, cd0: 0.022, len: 17,  gearH: 2.05, vr: 72,  stall: 58, color: 0x8e99a6, accent: 0x1e3a8a, roll: 2.6, pitch: 1.1, yaw: 0.4, cam: 26 },
   cargo: { name: 'Atlas C-9',   mass: 70000, S: 260, thrust: 420000, cd0: 0.024, len: 44,  gearH: 4.3, vr: 70,  stall: 55, color: 0xf2f4f7, accent: 0x0e7490, roll: 0.9, pitch: 0.55, yaw: 0.25, cam: 70 },
-  prop:  { name: 'Sparrow 172', mass: 1100,  S: 16,  thrust: 5200,  cd0: 0.03,  len: 8.3, gearH: 1.2, vr: 30,  stall: 24, color: 0xf8fafc, accent: 0xdc2626, roll: 1.6, pitch: 0.9, yaw: 0.5, cam: 16 },
+  prop:  { name: 'Sparrow T2', mass: 1100,  S: 16,  thrust: 5200,  cd0: 0.03,  len: 8.3, gearH: 1.2, fixedGear: true, vr: 30,  stall: 24, color: 0xf8fafc, accent: 0xdc2626, roll: 1.6, pitch: 0.9, yaw: 0.5, cam: 16 },
 };
 
 export const LIVERIES = [
@@ -176,7 +213,7 @@ export function buildAircraft(type, callsign = 'ALPHA-1', liveryId = 'default') 
   }
   // feux de navigation / strobes
   const span = type === 'cargo' ? 21 : type === 'jet' ? 6.2 : 5.8;
-  const nav = (c, x, y, z) => { const m = add(new THREE.SphereGeometry(type === 'cargo' ? 0.3 : 0.12, 8, 6), new THREE.MeshBasicMaterial({ color: c, toneMapped: false }), x, y, z); m.castShadow = false; return m; };
+  parts.navs = []; const nav = (c, x, y, z) => { const m = add(new THREE.SphereGeometry(type === 'cargo' ? 0.3 : 0.12, 8, 6), new THREE.MeshBasicMaterial({ color: c, toneMapped: false }), x, y, z); m.castShadow = false; parts.navs.push(m); return m; };
   nav(0xff2020, -span, type === 'prop' ? 0.95 : -0.2, type === 'cargo' ? 7 : 0.8).material.color.multiplyScalar(4);
   nav(0x20ff40, span, type === 'prop' ? 0.95 : -0.2, type === 'cargo' ? 7 : 0.8).material.color.multiplyScalar(4);
   parts.strobes.push(nav(0xffffff, 0, type === 'cargo' ? 9.5 : type === 'jet' ? 3.3 : 1.45, L * 0.48));
@@ -184,6 +221,7 @@ export function buildAircraft(type, callsign = 'ALPHA-1', liveryId = 'default') 
   // phare d'atterrissage
   const ll = new THREE.SpotLight(0xfff3d6, 0, 900, 0.35, 0.5, 1.2); ll.position.set(0, -0.5, -L * 0.3); ll.target.position.set(0, -12, -L * 0.3 - 80); root.add(ll, ll.target); parts.landingLight = ll;
   root.userData.parts = parts; root.userData.spec = sp;
+  if (MODELS[type]) attachGLB(root, type, sp, liveryId);
   return root;
 }
 
@@ -197,6 +235,7 @@ export function animateAircraft(obj, st, dt, t) {
   st.gearAnim += ((st.gear ? 1 : 0) - st.gearAnim) * Math.min(1, dt * 1.2);
   for (const g of p.gear) { g.rotation.x = (1 - st.gearAnim) * (g.userData.side === 0 ? -1.55 : 1.55); g.rotation.z = (1 - st.gearAnim) * g.userData.side * 0.0; g.visible = st.gearAnim > 0.03; }
   for (const pr of p.props) pr.rotation.z += dt * (8 + st.throttle * 60);
+  if (obj.userData.glbProps) for (const gp of obj.userData.glbProps) gp.node.rotateOnAxis(gp.axis, dt * (10 + st.throttle * 70));
   if (p.disc) p.disc.material.opacity = Math.min(0.35, st.throttle * 0.5 + 0.08);
   for (const b of p.burners) { b.material.opacity = Math.max(0, (st.throttle - 0.55) * 2) * (0.7 + Math.random() * 0.3); b.scale.set(1, 1, 0.6 + st.throttle * 0.8); }
   if (p.cores) for (const c of p.cores) c.material.emissiveIntensity = 0.3 + st.throttle * 3;

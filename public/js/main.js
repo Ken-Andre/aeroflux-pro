@@ -72,8 +72,9 @@ addEventListener('keydown', (e) => {
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
   keys[e.code] = true;
   const k = e.code;
-  if (k === 'KeyG' && !(S.onGround && !S.crashed)) { S.gear = !S.gear; audio.beep(S.gear ? 500 : 700, 0.25, 0.08); }
-  if (k === 'KeyG' && S.onGround) toast('TRAIN VERROUILLÉ', 'au sol', 1200);
+  if (k === 'KeyG' && spec.fixedGear) toast('TRAIN FIXE', spec.name + ' a un train non rétractable', 1200);
+  else if (k === 'KeyG' && !(S.onGround && !S.crashed)) { S.gear = !S.gear; audio.beep(S.gear ? 500 : 700, 0.25, 0.08); }
+  else if (k === 'KeyG' && S.onGround) toast('TRAIN VERROUILLÉ', 'au sol', 1200);
   if (k === 'KeyV') { S.flaps = S.flaps >= 0.99 ? 0 : Math.round((S.flaps + 0.34) * 3) / 3; audio.beep(600, 0.1, 0.06); }
   if (k === 'KeyB') S.brake = !S.brake;
   if (k === 'KeyL') { settings.assist = !settings.assist; localStorage.assist = settings.assist ? '1' : '0'; toast('ASSISTANCE ' + (settings.assist ? 'ON' : 'OFF'), settings.assist ? 'ailes à plat auto · anti-décrochage' : 'mode pilote expert', 1600); }
