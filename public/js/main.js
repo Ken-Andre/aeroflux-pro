@@ -53,7 +53,7 @@ function spawn() {
   if (plane) scene.remove(plane);
   plane = buildAircraft(cfg.type, cfg.name, progress.p.livery[cfg.type]); spec = SPECS[cfg.type]; scene.add(plane);
   S.airT = 0; S.distAcc = 0; S.lowT = 0; S.xpAcc = 0; S.from = null; missions?.clear();
-  S.crashed = false; S.onGround = cfg.spawn === 'runway'; S.airborne = !S.onGround; S.touch = null; S.maxAlt = 0; S.maxSpd = 0; S.t0 = performance.now();
+  S.crashed = false; S.onGround = cfg.spawn === 'runway'; S.airborne = !S.onGround; S.flying = S.airborne; S.touch = null; S.maxAlt = 0; S.maxSpd = 0; S.t0 = performance.now();
   if (cfg.spawn === 'runway') {
     S.pos.set(RWY.x, AIRPORT_H + spec.gearH, RWY.len / 2 - spec.len - 40); S.quat.identity(); S.vel.set(0, 0, 0); S.throttle = 0; S.gear = true; S.gearAnim = 1; S.flaps = cfg.type === 'jet' ? 0 : 0.33; S.brake = true;
   } else {
@@ -183,7 +183,8 @@ function physics(dt) {
     S.pos.addScaledVector(S.vel, dt);
     const gh = world.height(S.pos.x, S.pos.z);
     if (S.onGround) { S.pos.y = gh + spec.gearH; if (!world.onPaved(S.pos.x, S.pos.z)) { grass = true; } else grass = false; if (gh < 1.5) crash('AMERRISSAGE'); }
-    if (!S.onGround) { S.airborne = true; atc(`${cfg.name}, décollage à ${hhmm()}, bon vol.`); toast('DÉCOLLAGE', 'V-rotation ✓', 1500); S.from = missions.nearestAirport(S.pos); S.touch = null; progress.add(50, 'Décollage'); progress.unlock('takeoff'); progress.p.stats.flights++; progress.save(); }
+    if (!S.onGround) S.flying = false; // simple rebond : le décollage n'est validé qu'au-dessus de 12 m sol
+    else if (ns < 3) { S.airborne = false; S.flying = false; } // arrêté : prêt pour un nouveau décollage
     // fin de vol archivée après atterrissage et arrêt complet
     if (S.touch && ns < 2 && !S.touch.archived) { S.touch.archived = true; archive(true); }
     return;
@@ -193,6 +194,7 @@ function physics(dt) {
   // --- contact sol : atterrissage OU crash
   const gh = world.height(S.pos.x, S.pos.z); const clear = S.gearAnim > 0.9 ? spec.gearH : spec.gearH * 0.35;
   if (S.pos.y - clear <= gh) touchdown(gh, clear);
+  else if (!S.flying && !S.crashed && S.pos.y - gh > 12) { S.flying = true; S.airborne = true; atc(`${cfg.name}, décollage à ${hhmm()}, bon vol.`); toast('DÉCOLLAGE', 'V-rotation ✓', 1500); S.from = missions.nearestAirport(S.pos); S.touch = null; progress.add(50, 'Décollage'); progress.unlock('takeoff'); progress.p.stats.flights++; progress.save(); }
   if (S.pos.y > 30000) S.vel.y = Math.min(S.vel.y, 0);
   // bâtiments (bbox grossière de la ville)
 }
@@ -213,6 +215,8 @@ function touchdown(gh, clear) {
   else if (!paved && slope > 7) reason = 'TERRAIN TROP PENTU';
   else if (spd > spec.vr * 2.1) reason = 'VITESSE EXCESSIVE';
   if (reason) return crash(reason);
+  if (!S.flying) { S.onGround = true; S.pos.y = gh + spec.gearH; S.vel.y = 0; S.quat.setFromEuler(_e.set(Math.max(0, _e.x), _e.y, 0, 'YXZ')); return; } // rebond au roulage : pas un atterrissage
+  S.flying = false;
   // atterrissage réussi
   const grade = fpm < 180 ? ['BUTTER !', '#34d399', 1000] : fpm < 400 ? ['DOUX', '#38bdf8', 700] : fpm < 700 ? ['CORRECT', '#fbbf24', 400] : ['DUR', '#f97316', 150];
   const center = paved && world.onRunway(S.pos.x, S.pos.z) ? Math.max(0, 300 - Math.abs(S.pos.x - RWY.x) * 20) : 0;
@@ -402,7 +406,7 @@ function atc(msg) { $('#atc').textContent = 'ATC : ' + msg; }
 function hhmm() { return new Date().toTimeString().slice(0, 5); }
 function phaseName() {
   if (S.crashed) return 'CRASH'; const vs = S.vel.y * 196.85, agl = S.pos.y - world.height(S.pos.x, S.pos.z);
-  if (S.onGround) return S.vel.length() > 20 ? (S.airborne ? 'ROULAGE ATTERRISSAGE' : 'COURSE DÉCOLLAGE') : 'AU SOL';
+  if (S.onGround) return S.vel.length() > 20 ? (S.airborne && S.throttle < 0.6 ? 'ROULAGE ATTERRISSAGE' : 'COURSE DÉCOLLAGE') : 'AU SOL';
   if (agl < 300 && vs < -100 && S.gear) return 'APPROCHE'; if (vs > 400) return 'MONTÉE'; if (vs < -400) return 'DESCENTE'; return 'CROISIÈRE';
 }
 function updateUI(dt) {
